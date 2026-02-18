@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#001a4d" />
+
+  <text x="60" y="120" font-family="Segoe UI, Roboto, Helvetica, sans-serif" font-size="90" font-weight="900" fill="#ffffff" letter-spacing="-2">IVAN</text>
+
+  <text x="210" y="190" font-family="Segoe UI, Roboto, Helvetica, sans-serif" font-size="50" font-weight="300" fill="#cbd5e1" letter-spacing="2">DELIVER</text>
+
+  <path d="M80 420 Q 256 200 430 380" fill="none" stroke="#3b82f6" stroke-width="6" stroke-dasharray="12,8" opacity="0.8" />
+
+  <g transform="translate(390, 340) rotate(15)">
+    <rect width="90" height="55" rx="4" fill="#ffffff" />
+    <path d="M0 0 l45 30 45-30" fill="none" stroke="#001a4d" stroke-width="4" stroke-linejoin="round" />
+  </g>
+</svg>

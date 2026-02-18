@@ -1,0 +1,91 @@
+---
+const startCareer = new Date('2012-06-01');
+const today = new Date();
+const totalYears = Math.floor((today.getTime() - startCareer.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+const accentColor = "#3b82f6";
+---
+
+<section class="pro-focus" id="focus">
+  <div class="content">
+    <div class="wide-card">
+      <div class="header">
+        <span class="icon">🛡️</span>
+        <h2>Professional Focus: Email Deliverability & MTA Architecture</h2>
+      </div>
+      <p>
+        As a <b>Director of Email Deliverability</b> with a <b>{totalYears}-year track record</b>, 
+        I bridge the gap between deep technical infrastructure, email deliverability and compliance techniques and high-level business strategy. 
+        My journey began in the trenches of <b>System Administration and NOC Engineering</b>, 
+        providing me with a rock-solid foundation in the networking stack, MTA architecture, and the "physics" of mail transfer.
+      </p>
+
+      <p>
+        My core expertise in deliverability was forged вduding 5 amazinng years at <b>SMTP</b>, 
+		one of the true pioneers and oldest players in the email relay business. 
+        Working at such a cornerstone allowed me to gain invaluable "email wisdom" and 
+		a comprehensive technical base that fueled my progression to the highest levels of the field.
+      </p>
+     
+      <p>
+        During next 5 years at <b>Microsoft</b>, I didn't just refine my delivery skills—I gained invaluable experience 
+        in <b>leadership, project management, and product architecture</b>. I was instrumental in defining the direction 
+        for marketing automation products, driving their deep integration with <b>ML models and AI</b> to stay ahead of the evolving digital landscape.
+		Through dedicated effort and the unique opportunities offered by a global industry leader of this scale, 
+        I evolved from a deliverability engineer into a <b>senior-level specialist recognized within the industry</b>.
+      </p>
+
+      <p>
+        Today, at <b>Tiny email</b>, I lead the entire deliverability department, collaborating closely with engineers 
+        to build a truly modern platform for the email business. I oversee clients of every scale—from <b>agile Shopify entrepreneurs</b> 
+        to <b>Enterprise-level corporations</b>—focusing on strategic audience growth and long-term reputation sustainability.
+      </p>
+      
+      <div class="focus-grid">
+        <div class="focus-item"><span>◈</span> <div><b>Authentication&Compliance:</b><br/>SPF, DKIM, DMARC, BIMI</div></div>
+        <div class="focus-item"><span>◈</span> <div><b>Reputation:</b><br/>IP/Domain Warming & ISP Relations</div></div>
+        <div class="focus-item"><span>◈</span> <div><b>Security:</b><br/>Anti-Spam Logic & Feedback Loops</div></div>
+        <div class="focus-item"><span>◈</span> <div><b>Infrastructure:</b><br/>MTA Config (PowerMTA, Postfix, GreenArrow, Kumo)</div></div>
+        <div class="focus-item"><span>◈</span> <div><b>Strategy:</b><br/>Audit, Migration & Scalability</div></div>
+        <div class="focus-item"><span>◈</span> <div><b>Monitoring:</b><br/>Real-time Alerting & Deliverability ROI</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style define:vars={{ accentColor }}>
+  .pro-focus { padding: 1rem 2rem; display: flex; justify-content: center; }
+  .content { max-width: 900px; width: 100%; }
+  .wide-card {
+    padding: 2.5rem;
+    background: rgba(59, 130, 246, 0.07); 
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 24px;
+    color: white;
+  }
+  .header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .header h2 { font-size: 1.4rem; margin: 0; letter-spacing: 2px; text-transform: uppercase; color: var(--accentColor); }
+  p {
+  font-size: 1.15rem;
+  line-height: 1.8;
+  color: #f8fafc !important; /* Сделали текст ярче (был #e2e8f0) */
+  margin-bottom: 1.5rem;
+}
+  b { color: #ffffff !important; font-weight: 600; }
+  .focus-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 2rem;
+  }
+ .focus-item {
+  font-size: 0.95rem;
+  color: #e2e8f0 !important; /* Сделали ярче (был #94a3b8) */
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+  .focus-item span { color: var(--accentColor); font-weight: bold; }
+  .focus-item b { color: #f8fafc; font-weight: 500; }
+</style>

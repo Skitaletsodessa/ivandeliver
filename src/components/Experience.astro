@@ -1,0 +1,156 @@
+---
+const experiences = [
+  {
+    company: "tinyCo",
+    role: "Director of Deliverability",
+    date: "2025 - Present",
+    location: "Prague, Czech Republic (Remote)",
+    tags: ["Strategy", "Deliverability", "Leadership", "EmailOps"]
+  },
+  {
+    company: "Microsoft",
+    role: "Senior Email Deliverability Engineer",
+    date: "2024 - 2025",
+    location: "Prague, Czech Republic (Hybrid)",
+    tags: ["SMTP", "DNS", "AntiAbuse", "Security", "Scale"]
+  },
+  {
+    company: "Microsoft",
+    role: "Email Deliverability Engineer",
+    date: "2020 - 2024",
+    location: "Prague, Czech Republic",
+    tags: ["MailingSystems", "TechnicalSupport", "ProblemSolving"]
+  },
+  {
+    company: "SMTP, Inc.",
+    role: "Email Delivery Specialist",
+    date: "2015 - 2020",
+    location: "Odessa, Ukraine",
+    tags: ["Deliverability", "Infrastructure", "Networking"]
+  },
+  {
+    company: "SMTP, Inc.",
+    role: "Network Operations Engineer",
+    date: "2014 - 2015",
+    location: "Odessa Region, Ukraine",
+    tags: ["NOC", "Networking", "Monitoring", "Infrastructure"]
+  },
+  {
+    company: "JSC FINROSTBANK",
+    role: "Senior Software Engineer / SysAdmin",
+    date: "2009 - 2013",
+    location: "Odessa",
+    tags: ["Linux", "WindowsServer", "SQL", "SysAdmin"]
+  }
+];
+
+const accentColor = "#3b82f6";
+---
+
+<section class="experience" id="experience">
+  <div class="content">
+    <h2 class="section-title">Work Experience</h2>
+    <div class="experiences">
+      {
+        experiences.map((exp) => (
+          <div class="exp-card">
+            <div class="exp-header">
+              <span class="exp-icon">◈</span>
+              <div class="exp-info">
+                <h3 class="exp-role">{exp.role}</h3>
+                <p class="exp-company">{exp.company}</p>
+              </div>
+              <span class="exp-date">{exp.date}</span>
+            </div>
+            
+            <p class="exp-location">{exp.location}</p>
+
+            <div class="tags">
+              {exp.tags.map((tag) => (
+                <span class="tag">#{tag}</span>
+              ))}
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style define:vars={{ accentColor }}>
+  .experience {
+    padding: 2rem 2rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .content {
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .section-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 3rem;
+    text-align: center;
+  }
+
+  .experiences {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .exp-card {
+    padding: 1.5rem 2rem;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 16px;
+    color: white;
+    transition: all 0.4s ease;
+  }
+
+  .exp-card:hover {
+    transform: translateX(12px);
+    background: rgba(59, 130, 246, 0.08);
+    border-color: var(--accentColor);
+  }
+
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+  }
+
+  .exp-icon { color: var(--accentColor); margin-right: 0.75rem; font-size: 1.2rem; }
+  .exp-info { flex: 1; }
+  .exp-role { font-size: 1.25rem; font-weight: 600; margin: 0; }
+  .exp-company { color: var(--accentColor); font-weight: 500; margin: 0.2rem 0; }
+  .exp-date { font-size: 0.85rem; opacity: 0.5; }
+  .exp-location { font-size: 0.85rem; opacity: 0.4; margin: 0.5rem 0 1rem 2rem; }
+
+  /* Стили хештегов */
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-left: 2rem;
+  }
+
+  .tag {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--accentColor);
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+    cursor: default;
+  }
+
+  .exp-card:hover .tag {
+    opacity: 1;
+  }
+</style>

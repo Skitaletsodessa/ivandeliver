@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Указываем поисковикам путь к карте сайта
+Sitemap: https://ivandeliver.email/sitemap-index.xml

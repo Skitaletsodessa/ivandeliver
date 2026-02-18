@@ -1,0 +1,76 @@
+---
+const today = new Date();
+const birthDate = new Date('1992-02-21'); 
+const startCareer = new Date('2012-06-01');
+
+let age = today.getFullYear() - birthDate.getFullYear();
+const monthDiff = today.getMonth() - birthDate.getMonth();
+if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+}
+
+const totalYears = Math.floor((today.getTime() - startCareer.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+const accentColor = "#3b82f6";
+---
+
+<section class="about" id="about">
+  <div class="content">
+  <h2 class="visually-hidden">About Me & Interests</h2>
+    <div class="about-grid">
+      <div class="about-card">
+        <h3>Expertise</h3>
+        <p>
+          I am a <b>{age}-year-old</b> Director of Email Deliverability with over <b>{totalYears} years</b> of experience. 
+          Based in <b>Prague</b> since 2020, I previously spent years at <b>Microsoft</b> ensuring high-scale email systems work flawlessly.
+        </p>
+      </div>
+
+      <div class="about-card">
+        <h3>Travel & Nature</h3>
+        <p>
+          I'm a true petrolheart and metalhead who finds peace on the open road listening to favourite metal bands and driving my classic <b>Ford Cougar 2.5 V6</b>. I love <b>long-distance driving</b> across different countries 
+          with my lovely wife and our two kids. I enjoy <b>mushroom picking</b>, 
+          fishing, and capturing beautiful views along the way with my family.
+        </p>
+      </div>
+
+      <div class="about-card">
+        <h3>Personal</h3>
+        <p>
+          A dedicated "Cat Dad" to <b>5 wonderful felines</b>. When I'm not behind the wheel, 
+          I'm likely grilling on my Traeger, crafting cocktails, or working on 3D printing projects 
+          while enjoying a perfectly balanced cup of coffee.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style define:vars={{ accentColor }}>
+  .about { padding: 1rem 2rem; display: flex; justify-content: center; }
+  .content { max-width: 900px; width: 100%; }
+  .about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+  .about-card {
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 20px;
+    color: white;
+    transition: transform 0.3s ease;
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+  .about-card:hover { transform: translateY(-5px); border-color: var(--accentColor); }
+  h3 { color: var(--accentColor); margin-top: 0; font-size: 1.25rem; text-transform: uppercase; letter-spacing: 1px; }
+  p { line-height: 1.6; font-size: 1rem; color: #cbd5e1; margin-bottom: 0; }
+  b { color: white; font-weight: 600; }
+</style>

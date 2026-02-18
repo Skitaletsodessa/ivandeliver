@@ -1,0 +1,113 @@
+---
+/**
+ * Обновленный компонент Webring
+ * Используем официальные редирект-ссылки после одобрения PR
+ */
+const prevLink = "https://astro-webrings.lou.gg/prev?site=ivan-deliver-email&ring=built-with-astro";
+const nextLink = "https://astro-webrings.lou.gg/next?site=ivan-deliver-email&ring=built-with-astro";
+const hubLink = "https://astro-webrings.lou.gg/";
+
+const accentColor = "#3b82f6";
+---
+
+<div class="webring-container">
+  <div class="webring-card">
+    <span class="webring-label">Astro Webring</span>
+    <div class="webring-nav">
+      <a href={prevLink} class="nav-btn" title="Previous Site">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </a>
+      
+      <a href={hubLink} target="_blank" class="hub-btn" aria-label="Astro Webring">
+  <div class="astro-icon">
+        <div class="astro-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg>
+        </div>
+      </a>
+	  <a href={hubLink} target="_blank" class="hub-btn" aria-label="Visit Astro Webring Hub">
+  <div class="astro-icon">
+    <svg ...></svg>
+  </div>
+</a>
+
+      <a href={nextLink} class="nav-btn" title="Next Site">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </a>
+    </div>
+  </div>
+</div>
+
+<style define:vars={{ accentColor }}>
+  .webring-container {
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .webring-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 50px;
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .webring-card:hover {
+    border-color: var(--accentColor);
+    background: rgba(59, 130, 246, 0.05);
+  }
+
+  .webring-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #94a3b8;
+  }
+
+  .webring-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .nav-btn {
+    width: 24px;
+    height: 24px;
+    color: #94a3b8;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nav-btn:hover {
+    color: var(--accentColor);
+    transform: scale(1.1);
+  }
+
+  .hub-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+  }
+
+  .astro-icon {
+    width: 28px;
+    height: 28px;
+    color: white;
+    transition: transform 0.3s ease;
+  }
+
+  .hub-btn:hover .astro-icon {
+    transform: rotate(10deg);
+  }
+
+  svg { width: 100%; height: 100%; }
+</style>

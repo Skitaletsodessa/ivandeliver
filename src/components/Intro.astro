@@ -1,0 +1,98 @@
+---
+import profilePicture from "../assets/profile-picture.png"; // Используем сжатый webp
+
+interface Props {
+  name: string;
+  subtitle: string;
+}
+
+const { name, subtitle } = Astro.props;
+---
+
+<section class="intro">
+  <div class="content">
+    <img 
+      src={profilePicture.src} 
+      alt="Ivan Maltsev - Email Deliverability Expert and MTA Architect in Prague" 
+      class="pfp"
+      width="120" 
+      height="120"
+      loading="eager"
+      decoding="async"
+    />
+    <div class="text-block">
+      <h1>{name}</h1>
+      <p class="subtitle">{subtitle}</p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .intro {
+    padding: 6rem 2rem 2rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .content {
+    max-width: 800px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 3rem;
+  }
+
+  .pfp {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    /* Заменяем лавандовый на твой новый акцентный синий */
+    border: 4px solid #3b82f6;
+    object-fit: cover;
+    transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .pfp:hover {
+    transform: scale(1.05) rotate(3deg);
+    border-color: white;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+
+  .text-block {
+    flex: 1;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: white !important;
+    margin: 0 0 1rem 0;
+    line-height: 1.1;
+    letter-spacing: -1px;
+  }
+
+  .subtitle {
+    font-size: 1.2rem;
+    /* Светлый серо-голубой для лучшей читаемости на синем фоне */
+    color: #94a3b8;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  @media (max-width: 768px) {
+    .content {
+      flex-direction: column;
+      text-align: center;
+      gap: 1.5rem;
+    }
+
+    .pfp {
+      width: 120px;
+      height: 120px;
+    }
+
+    h1 {
+      font-size: 2rem;
+    }
+  }
+</style>

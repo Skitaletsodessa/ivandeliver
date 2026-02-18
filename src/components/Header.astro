@@ -1,0 +1,94 @@
+---
+const logo = "/favicon.svg";
+---
+
+<nav class="header">
+  <div class="header-content">
+    <div class="logo-area">
+      <img src={logo} alt="Ivan Deliverability Logo" class="header-logo" />
+      <span class="site-name">IVAN<b>DELIVER</b></span>
+    </div>
+    
+    <div class="nav-links">
+      <a href="#experience">Experience</a>
+      <a href="#focus">Focus</a>
+      <a href="#about">About</a>
+      <a href="#contact" class="cta-btn">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<style>
+  .header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: rgba(0, 26, 77, 0.4); /* Полупрозрачный темно-синий */
+    backdrop-filter: blur(15px); /* Тот самый стеклянный эффект */
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    padding: 0.75rem 2rem;
+  }
+
+  .header-content {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .header-logo {
+    width: 32px;
+    height: 32px;
+  }
+
+  .site-name {
+    color: white;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    font-weight: 300;
+  }
+
+  .site-name b {
+    color: #3b82f6;
+    font-weight: 700;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .nav-links a {
+    color: #cbd5e1;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.3s;
+  }
+
+  .nav-links a:hover {
+    color: white;
+  }
+
+  .cta-btn {
+    background: #3b82f6;
+    color: white !important;
+    padding: 0.5rem 1.25rem;
+    border-radius: 50px;
+    font-weight: 600 !important;
+  }
+
+  @media (max-width: 768px) {
+    .nav-links { display: none; } /* Для мобилок потом сделаем меню-гамбургер */
+  }
+</style>

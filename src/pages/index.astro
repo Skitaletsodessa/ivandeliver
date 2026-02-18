@@ -1,0 +1,39 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Intro from "../components/Intro.astro";
+import About from "../components/About.astro";
+import ProfessionalFocus from "../components/ProfessionalFocus.astro";
+import Experience from "../components/Experience.astro";
+import Contact from "../components/Contact.astro"; // Вот эта строчка была пропущена!
+import Webring from "../components/Webring.astro";
+
+const variables = {
+  name: "Ivan Maltsev",
+  subtitles: "Director of Email Deliverability & Anti-Abuse Expert",
+};
+---
+
+<Layout title={variables.name}>
+  <main>
+    <Intro name={variables.name} subtitle={variables.subtitles} />
+    <About />
+    <ProfessionalFocus />
+    <Experience />
+    
+    <Contact />
+
+    <footer class="footer-rings">
+      <Webring />
+    </footer>
+  </main>
+</Layout>
+
+<style>
+  /* Минимизируем вертикальные отступы между основными блоками */
+  main > :global(section) {
+    margin-bottom: 0;
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+  }
+  .footer-rings { padding: 2rem 0 4rem; display: flex; justify-content: center; }
+</style>

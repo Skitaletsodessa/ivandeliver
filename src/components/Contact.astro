@@ -1,0 +1,86 @@
+---
+const accentColor = "#3b82f6";
+const email = "ivan@ivandeliver.email";
+
+const today = new Date();
+const isBirthday = today.getMonth() === 1 && today.getDate() === 21;
+---
+
+<section class="contact" id="contact">
+  <div class="content">
+    <div class="contact-card" class:list={{ "birthday-glow": isBirthday }}>
+      <div class="contact-text">
+        <h2>{isBirthday ? "It's my Birthday! 🎂" : "Let's talk Deliverability"}</h2>
+        <p>
+          {isBirthday 
+            ? "Today is a great day to start a new project or just say hi. I'm celebrating, but my inbox is always open for good news!" 
+            : "Whether you need a strategic audit, infrastructure scaling, or just want to discuss MTA configurations over a cup of coffee — my inbox is open."
+          }
+        </p>
+      </div>
+      
+      <div class="contact-action">
+        <a href={`mailto:${email}`} class="mail-btn">
+          <span class="icon">{isBirthday ? "🎉" : "✉"}</span>
+          {isBirthday ? "Send Birthday Wishes!" : email}
+        </a>
+        <div class="social-links">
+          <a href="https://www.linkedin.com/in/skitalets/" target="_blank" class="social-icon">LinkedIn</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style define:vars={{ accentColor }}>
+  .contact { padding: 4rem 2rem 2rem; display: flex; justify-content: center; }
+  .content { max-width: 900px; width: 100%; }
+  .contact-card {
+    padding: 3rem;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    transition: all 0.5s ease;
+  }
+  .birthday-glow { border-color: #f43f5e; background: rgba(244, 63, 94, 0.05); box-shadow: 0 0 30px rgba(244, 63, 94, 0.1); }
+  .contact-text h2 { font-size: 2rem; margin: 0 0 1rem 0; color: white; }
+  .contact-text p {
+  color: #cbd5e1; /* Был #94a3b8 */
+  font-size: 1.1rem;
+  line-height: 1.6;
+  max-width: 500px;
+  margin: 0;
+}
+  .contact-action { display: flex; flex-direction: column; align-items: flex-end; gap: 1.5rem; }
+  .mail-btn {
+    padding: 1rem 1.5rem;
+    background: var(--accentColor);
+    color: white;
+    text-decoration: none;
+    border-radius: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 10px 20px rgba(59, 130, 246, 0.2);
+  }
+  .birthday-glow .mail-btn { background: #f43f5e; box-shadow: 0 10px 20px rgba(244, 63, 94, 0.2); }
+  .mail-btn:hover { transform: translateY(-3px); filter: brightness(1.1); }
+  .social-links { display: flex; gap: 0.75rem; font-size: 0.9rem; }
+  .social-icon {
+  color: #cbd5e1; /* Был #94a3b8 */
+  text-decoration: none;
+  transition: color 0.2s;
+}
+  .social-icon:hover { color: white; }
+  @media (max-width: 768px) {
+    .contact-card { flex-direction: column; text-align: center; padding: 2rem; }
+    .contact-action { align-items: center; }
+  }
+</style>

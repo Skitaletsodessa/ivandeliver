@@ -1,0 +1,149 @@
+---
+import Header from '../components/Header.astro';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    
+    <title>{title}</title>
+    <meta name="keywords" content="Ivan Maltsev, Email Deliverability, MTA Architecture, Anti-Abuse, SPF, DKIM, DMARC, BIMI, Postfix, PowerMTA, Email Infrastructure Expert, Prague IT Specialist, Ivan Deliver" />
+    <meta name="description" content="Ivan Maltsev — Director of Email Deliverability & Anti-Abuse Expert in Prague. 13+ years specializing in global email infrastructure, MTA architecture, and sender reputation." />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": "Ivan Maltsev",
+      "jobTitle": "Director of Email Deliverability",
+      "url": "https://ivandeliver.email",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Prague",
+        "addressCountry": "Czech Republic"
+      },
+      "sameAs": [
+        "https://www.linkedin.com/in/skitalets/"
+      ]
+    }
+    </script>
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ivandeliver.email/" />
+    <meta property="og:title" content="Ivan Maltsev | Director of Email Deliverability" />
+    <meta property="og:description" content="Expert in Email Deliverability, Anti-Abuse, and Infrastructure. Scaling global email systems for enterprises." />
+    <meta property="og:image" content="https://ivandeliver.email/og-image.jpg" />
+
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://ivandeliver.email/" />
+    <meta property="twitter:title" content="Ivan Maltsev | Director of Email Deliverability" />
+    <meta property="twitter:description" content="13+ years of experience in Email Ops and Deliverability. Previously at Microsoft." />
+    <meta property="twitter:image" content="https://ivandeliver.email/og-image.jpg" />
+  </head>
+  <body>
+    <Header />
+    
+    <slot />
+
+    <div class="sky-background" aria-hidden="true">
+      <div class="particle plane p1"></div>
+      <div class="particle envelope p2"></div>
+      <div class="particle plane p3"></div>
+      <div class="particle envelope p4"></div>
+      <div class="particle plane p5"></div>
+      <div class="particle envelope p6"></div>
+      <div class="particle plane p7"></div>
+      <div class="particle envelope p8"></div>
+    </div>
+
+    <style is:global>
+      :root {
+        color-scheme: dark;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 100px; /* Фикс нахлеста хедера */
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        padding-top: 70px;
+        color: #ffffff !important; 
+        font-family: system-ui, sans-serif;
+      }
+
+      /* Исправление контраста для PageSpeed */
+      h1, h2, h3, h4, b {
+        color: #ffffff !important;
+      }
+
+      p, span {
+        color: #cbd5e1 !important; /* Более яркий серый для доступности */
+      }
+
+      .sky-background {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        overflow: hidden;
+        background: linear-gradient(to bottom, #001a4d, #000c24);
+      }
+
+      .particle {
+        position: absolute;
+        width: 45px;
+        height: 45px;
+        background-color: white;
+        opacity: 0.1;
+        pointer-events: none;
+      }
+
+      .plane {
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 16.5l-8.5-4.5V3l8.5 13.5zM3 16.5L11.5 12V3 16.5zM12 12l.5 9 8.5-4.5-9-4.5zM12 12l-.5 9-8.5-4.5 9-4.5z"/></svg>') no-repeat center;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 16.5l-8.5-4.5V3l8.5 13.5zM3 16.5L11.5 12V3 16.5zM12 12l.5 9 8.5-4.5-9-4.5zM12 12l-.5 9-8.5-4.5 9-4.5z"/></svg>') no-repeat center;
+      }
+
+      .envelope {
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>') no-repeat center;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>') no-repeat center;
+      }
+
+      @keyframes fly {
+        from { transform: translate(-150px, 110vh) rotate(-15deg); }
+        to { transform: translate(110vw, -150px) rotate(35deg); }
+      }
+
+      .p1 { animation: fly 15s linear infinite; top: 10%; left: 5%; }
+      .p2 { animation: fly 22s linear infinite; top: 30%; left: 15%; animation-delay: 2s; }
+      .p3 { animation: fly 18s linear infinite; top: 50%; left: 25%; animation-delay: 5s; }
+      .p4 { animation: fly 28s linear infinite; top: 80%; left: 10%; animation-delay: 8s; }
+      .p5 { animation: fly 20s linear infinite; top: 20%; left: 40%; animation-delay: 10s; }
+      .p6 { animation: fly 24s linear infinite; top: 60%; left: 60%; animation-delay: 1s; }
+      .p7 { animation: fly 16s linear infinite; top: 40%; left: 70%; animation-delay: 4s; }
+      .p8 { animation: fly 30s linear infinite; top: 90%; left: 50%; animation-delay: 6s; }
+
+      /* Скрытие заголовков для роботов */
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+    </style>
+  </body>
+</html>
