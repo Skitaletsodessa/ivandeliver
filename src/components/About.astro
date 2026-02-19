@@ -9,7 +9,11 @@ if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate()))
     age--;
 }
 
-const totalYears = Math.floor((today.getTime() - startCareer.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+let totalYears = today.getFullYear() - startCareer.getFullYear();
+const expDiff = today.getMonth() - startCareer.getMonth();
+if (expDiff < 0 || (expDiff === 0 && today.getDate() < startCareer.getDate())) {
+    totalYears--;
+}
 const accentColor = "#3b82f6";
 ---
 
