@@ -27,16 +27,17 @@ export default function BLWidget() {
         <span className="dot red"></span>
         <span className="dot yellow"></span>
         <span className="dot green"></span>
-        <span className="title">DNSBL_CHECKER.BAT</span>
+        <span className="title">MTA_DIAGNOSTICS.SH</span>
       </div>
       
       <div className="terminal-body">
         <div className="input-group">
           <input 
             type="text" 
-            placeholder="Enter IP address..." 
+            placeholder="IP or Domain..." 
             value={ip}
             onChange={(e) => setIp(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
           />
           <button onClick={handleCheck} disabled={loading}>
             {loading ? '...' : 'SCAN'}
@@ -46,13 +47,18 @@ export default function BLWidget() {
         <div className="results">
           {results.length > 0 ? (
             results.map((r) => (
-              <div key={r.host} className={`line ${r.isBlacklisted ? 'listed' : 'clean'}`}>
+              <div key={r.host} className={`line ${r.severity}`}>
                 <span className="host">{r.host}</span>
-                <span className="status">[{r.status}]</span>
+                <span className="status">
+                  {r.severity === 'danger' && '🛑 '}
+                  {r.severity === 'warning' && '⚠️ '}
+                  {r.severity === 'safe' && '✅ '}
+                  {r.status}
+                </span>
               </div>
             ))
           ) : (
-            <div className="idle">Ready for DNSBL lookup...</div>
+            <div className="idle">Waiting for input...</div>
           )}
         </div>
       </div>
@@ -61,14 +67,14 @@ export default function BLWidget() {
         .bl-widget {
           background: #0d1117;
           border: 1px solid #30363d;
-          border-radius: 8px;
+          border-radius: 12px;
           overflow: hidden;
-          font-family: 'Fira Code', 'Courier New', monospace;
+          font-family: 'Fira Code', monospace;
           box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         .terminal-header {
           background: #161b22;
-          padding: 8px 12px;
+          padding: 10px 14px;
           display: flex;
           align-items: center;
           gap: 6px;
@@ -77,22 +83,45 @@ export default function BLWidget() {
         .dot { width: 10px; height: 10px; border-radius: 50%; }
         .red { background: #ff5f56; } .yellow { background: #ffbd2e; } .green { background: #27c93f; }
         .title { color: #8b949e; font-size: 10px; margin-left: auto; letter-spacing: 1px; }
+        
         .terminal-body { padding: 15px; }
         .input-group { display: flex; gap: 8px; margin-bottom: 15px; }
+        
         input { 
           flex: 1; background: #010409; border: 1px solid #30363d; color: #58a6ff;
-          padding: 6px 10px; border-radius: 4px; font-size: 12px;
+          padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none;
         }
+        input:focus { border-color: #3b82f6; }
+        
         button {
-          background: #238636; color: white; border: none; padding: 6px 12px;
-          border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px;
+          background: #238636; color: white; border: none; padding: 0 15px;
+          border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px;
+          transition: background 0.2s;
         }
         button:hover { background: #2ea043; }
-        .results { font-size: 11px; max-height: 200px; overflow-y: auto; }
-        .line { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #21262d; }
-        .listed { color: #ff7b72; }
-        .clean { color: #7ee787; }
-        .idle { color: #8b949e; text-align: center; padding: 20px; font-style: italic; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .results { 
+          font-size: 11px; 
+          max-height: 250px; 
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: #30363d #0d1117;
+        }
+        .line { 
+          display: flex; 
+          justify-content: space-between; 
+          padding: 6px 4px; 
+          border-bottom: 1px solid #21262d; 
+        }
+        .host { color: #8b949e; }
+        
+        /* Цвета статусов */
+        .danger .status { color: #ff7b72; font-weight: bold; }
+        .warning .status { color: #f2cc60; }
+        .safe .status { color: #7ee787; }
+        
+        .idle { color: #484f58; text-align: center; padding: 30px; font-style: italic; font-size: 12px; }
       `}</style>
     </div>
   );

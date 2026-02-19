@@ -12,10 +12,10 @@ export const POST = async ({ request }) => {
       'zen.spamhaus.org',
       'bl.spamcop.net',
       'b.barracudacentral.org',
-      'bl.mailspike.net',      // Добавили: отличный репутационный лист
-      'dnsbl.spfbl.net',       // Добавили: очень активный сейчас
+      'bl.mailspike.net',
+      'dnsbl.spfbl.net',
       'bl.blocklist.de',
-	  'combined.mail.abusix.zone', // Abusix - очень крутой современный лист
+      'combined.mail.abusix.zone',
       'dnsbl.dronebl.org'
     ];
   } else {
@@ -25,9 +25,9 @@ export const POST = async ({ request }) => {
       'dbl.spamhaus.org',
       'multi.surbl.org',
       'black.uribl.com',
-      'uribl.spameatingmonkey.net', // Добавили: хорош для новых доменов
-      'dbl.nordspam.com',            // Добавили: современный европейский лист
-	  'dhost.abusix.zone' // Доменный лист от Abusix
+      'uribl.spameatingmonkey.net',
+      'dbl.nordspam.com',
+      'dhost.abusix.zone'
     ];
   }
 
@@ -37,28 +37,35 @@ export const POST = async ({ request }) => {
       const data = await response.json();
       
       if (!data.Answer || data.Answer.length === 0) {
-        return { host: bl, isBlacklisted: false, status: 'CLEAN' };
+        return { host: bl, severity: 'safe', status: 'NOT LISTED' };
       }
 
       const responseCode = data.Answer[0].data;
+      const lastOctet = parseInt(responseCode.split('.').pop() || '0');
 
-      // Умная обработка Spamhaus (PBL)
+      // 1. Обработка Spamhaus PBL (Желтый - Warning)
       if (bl === 'zen.spamhaus.org' && (responseCode === '127.0.0.10' || responseCode === '127.0.0.11')) {
-        return { host: bl, isBlacklisted: false, status: 'CLEAN (PBL)' };
+        return { host: bl, severity: 'warning', status: 'POLICY (PBL)' };
       }
 
-      // Обработка Mailspike (они используют коды 127.0.0.10-14 для хороших IP)
-      if (bl === 'bl.mailspike.net' && parseInt(responseCode.split('.').pop()) > 10) {
-          return { host: bl, isBlacklisted: false, status: 'CLEAN (Rep)' };
+      // 2. Обработка Mailspike (H-репутация)
+      if (bl === 'bl.mailspike.net') {
+        if (lastOctet >= 15 && lastOctet <= 20) {
+          return { host: bl, severity: 'warning', status: `LOW REP (${responseCode})` };
+        }
+        if (lastOctet >= 10 && lastOctet <= 14) {
+          return { host: bl, severity: 'safe', status: 'CLEAN (Rep)' };
+        }
       }
 
+      // 3. По умолчанию — 100% листинг (Красный - Danger)
       return {
         host: bl,
-        isBlacklisted: true,
+        severity: 'danger',
         status: `LISTED (${responseCode})`
       };
     } catch (e) {
-      return { host: bl, isBlacklisted: false, status: 'ERROR' };
+      return { host: bl, severity: 'safe', status: 'ERROR' };
     }
   }));
 
