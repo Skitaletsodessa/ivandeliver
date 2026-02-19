@@ -36,6 +36,7 @@ export const POST = async ({ request }) => {
       const response = await fetch(`https://dns.google/resolve?name=${queryTarget}.${bl}&type=A`);
       const data = await response.json();
       
+      // Если ответов нет (NXDOMAIN) — значит всё чисто
       if (!data.Answer || data.Answer.length === 0) {
         return { host: bl, severity: 'safe', status: 'NOT LISTED' };
       }
@@ -43,12 +44,18 @@ export const POST = async ({ request }) => {
       const responseCode = data.Answer[0].data;
       const lastOctet = parseInt(responseCode.split('.').pop() || '0');
 
-      // 1. Обработка Spamhaus PBL (Желтый - Warning)
+      // 1. Обработка ошибки доступа Spamhaus (Query Refused)
+      // Если видим 127.255.255.254/252 — это не листинг, а отказ в запросе через Google DNS
+      if (bl.includes('spamhaus') && (responseCode === '127.255.255.254' || responseCode === '127.255.255.252')) {
+        return { host: bl, severity: 'safe', status: 'REFUSED (Use DQS)' };
+      }
+
+      // 2. Логика Spamhaus PBL (Желтый - Warning)
       if (bl === 'zen.spamhaus.org' && (responseCode === '127.0.0.10' || responseCode === '127.0.0.11')) {
         return { host: bl, severity: 'warning', status: 'POLICY (PBL)' };
       }
 
-      // 2. Обработка Mailspike (H-репутация)
+      // 3. Обработка Mailspike (Репутация)
       if (bl === 'bl.mailspike.net') {
         if (lastOctet >= 15 && lastOctet <= 20) {
           return { host: bl, severity: 'warning', status: `LOW REP (${responseCode})` };
@@ -58,14 +65,14 @@ export const POST = async ({ request }) => {
         }
       }
 
-      // 3. По умолчанию — 100% листинг (Красный - Danger)
+      // 4. Все остальные случаи (SBL, XBL, Spamcop и т.д.) — это реальный листинг
       return {
         host: bl,
         severity: 'danger',
         status: `LISTED (${responseCode})`
       };
     } catch (e) {
-      return { host: bl, severity: 'safe', status: 'ERROR' };
+      return { host: bl, severity: 'safe', status: 'DNS ERROR' };
     }
   }));
 
