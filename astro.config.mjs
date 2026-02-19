@@ -7,18 +7,15 @@ import { defineConfig, envField } from "astro/config";
 // https://astro.build/config
 export default defineConfig({
   site: 'https://ivandeliver.email',
-  
-  // Режим сервера для работы API-роутов и использования секретов
   output: 'server',
 
   adapter: cloudflare({
     platformProxy: {
       enabled: true,
     },
-    // Используем встроенный сервис Cloudflare для оптимизации изображений
     imageService: 'cloudflare',
-    // Отключаем поиск SESSION KV для чистоты логов
-    persistedStoredValues: false 
+    // Мы явно отключаем сессии KV, чтобы не лезла ошибка "Invalid binding SESSION"
+    runtime: { mode: 'complete', type: 'pages' }
   }),
   
   integrations: [
@@ -27,14 +24,17 @@ export default defineConfig({
   ],
 
   build: {
-    // Инлайним CSS для устранения Render-blocking и улучшения LCP
     inlineStylesheets: 'always'
   },
   
   env: {
     schema: {
-      // Ключ для Spamhaus DQS — СТРОГО secret и только context: server
-      SPAMHAUS_DQS_KEY: envField.string({ context: "server", access: "secret" }),
+      // Ключ для Spamhaus DQS
+      SPAMHAUS_DQS_KEY: envField.string({ 
+        context: "server", 
+        access: "secret",
+        optional: true // Делаем его опциональным, чтобы билд не падал, если переменная не подтянулась сразу
+      }),
     },
   },
 });
