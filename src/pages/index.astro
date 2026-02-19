@@ -30,7 +30,7 @@ const variables = {
           <BLWidget client:load />
           
           <div class="sidebar-info">
-            <p>MTA tools and diagnostics. Ready for live DNSBL analysis.</p>
+            <p>Quickly and easily check the health of your domain or IP address here.</p>
           </div>
         </div>
       </aside>
@@ -88,29 +88,4 @@ const variables = {
     display: flex; 
     justify-content: center;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    margin-top: 2rem;
-  }
-
-  /* Адаптивность для мобилок */
-  @media (max-width: 1024px) {
-    .content-layout {
-      grid-template-columns: 1fr; /* Одна колонка */
-      gap: 1rem;
-    }
-
-    .sidebar {
-      padding-top: 0;
-      order: 2; /* Чекер будет после опыта, но перед контактами, если нужно */
-    }
-
-    .main-content {
-      order: 1;
-    }
-    
-    .sticky-sidebar {
-      position: relative;
-      top: 0;
-      margin-bottom: 2rem;
-    }
-  }
-</style>
+    margin-top:

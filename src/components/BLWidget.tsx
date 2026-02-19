@@ -27,7 +27,7 @@ export default function BLWidget() {
         <span className="dot red"></span>
         <span className="dot yellow"></span>
         <span className="dot green"></span>
-        <span className="title">MTA_DIAGNOSTICS.SH</span>
+        <span className="title">BLOCKLIST_CHECKER.SH</span>
       </div>
       
       <div className="terminal-body">
