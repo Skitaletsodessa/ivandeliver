@@ -1,0 +1,8 @@
+# Ivan Maltsev - Security Policy
+Contact: mailto:im@ivandeliver.email
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en, uk, ru, ua, cz
+Canonical: https://ivandeliver.email/.well-known/security.txt
+Hiring: https://ivandeliver.email/#contact
+
+# If you find a security issue, please contact me directly via email.

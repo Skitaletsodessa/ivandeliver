@@ -1,5 +1,20 @@
 User-agent: *
 Allow: /
 
-# Указываем поисковикам путь к карте сайта
+# Запрещаем конкретным ИИ-ботам индексацию
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
 Sitemap: https://ivandeliver.email/sitemap-index.xml
