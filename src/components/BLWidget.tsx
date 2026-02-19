@@ -27,7 +27,7 @@ export default function BLWidget() {
         <span className="dot red"></span>
         <span className="dot yellow"></span>
         <span className="dot green"></span>
-        <span className="title">BLOCKLIST_CHECK.SH</span>
+        <span className="title">MTA_DIAGNOSTICS.SH</span>
       </div>
       
       <div className="terminal-body">
@@ -58,7 +58,7 @@ export default function BLWidget() {
               </div>
             ))
           ) : (
-            <div className="idle">Waiting for input...</div>
+            <div className="idle">Ready for professional lookup...</div>
           )}
         </div>
       </div>
@@ -116,7 +116,6 @@ export default function BLWidget() {
         }
         .host { color: #8b949e; }
         
-        /* Цвета статусов */
         .danger .status { color: #ff7b72; font-weight: bold; }
         .warning .status { color: #f2cc60; }
         .safe .status { color: #7ee787; }
