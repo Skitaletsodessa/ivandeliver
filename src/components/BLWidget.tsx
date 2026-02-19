@@ -27,7 +27,7 @@ export default function BLWidget() {
         <span className="dot red"></span>
         <span className="dot yellow"></span>
         <span className="dot green"></span>
-        <span className="title">MTA_CHECKER_V1.0</span>
+        <span className="title">DNSBL_CHECKER.BAT</span>
       </div>
       
       <div className="terminal-body">
