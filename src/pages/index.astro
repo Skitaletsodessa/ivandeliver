@@ -4,8 +4,9 @@ import Intro from "../components/Intro.astro";
 import About from "../components/About.astro";
 import ProfessionalFocus from "../components/ProfessionalFocus.astro";
 import Experience from "../components/Experience.astro";
-import Contact from "../components/Contact.astro"; // Вот эта строчка была пропущена!
+import Contact from "../components/Contact.astro";
 import Webring from "../components/Webring.astro";
+import BLWidget from "../components/BLWidget.tsx"; // Импортируем наш новый инструмент
 
 const variables = {
   name: "Ivan Maltsev",
@@ -14,13 +15,26 @@ const variables = {
 ---
 
 <Layout title={variables.name}>
-  <main>
-    <Intro name={variables.name} subtitle={variables.subtitles} />
-    <About />
-    <ProfessionalFocus />
-    <Experience />
-    
-    <Contact />
+  <main class="main-container">
+    <div class="content-layout">
+      <div class="main-content">
+        <Intro name={variables.name} subtitle={variables.subtitles} />
+        <About />
+        <ProfessionalFocus />
+        <Experience />
+        <Contact />
+      </div>
+
+      <aside class="sidebar">
+        <div class="sticky-sidebar">
+          <BLWidget client:load />
+          
+          <div class="sidebar-info">
+            <p>MTA tools and diagnostics. Ready for live DNSBL analysis.</p>
+          </div>
+        </div>
+      </aside>
+    </div>
 
     <footer class="footer-rings">
       <Webring />
@@ -29,11 +43,74 @@ const variables = {
 </Layout>
 
 <style>
-  /* Минимизируем вертикальные отступы между основными блоками */
-  main > :global(section) {
+  .main-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
+
+  .content-layout {
+    display: grid;
+    /* 1fr для контента, 320px для виджета */
+    grid-template-columns: 1fr 320px;
+    gap: 3rem;
+  }
+
+  .main-content > :global(section) {
     margin-bottom: 0;
     padding-top: 2rem;
     padding-bottom: 2rem;
   }
-  .footer-rings { padding: 2rem 0 4rem; display: flex; justify-content: center; }
+
+  .sidebar {
+    padding-top: 8rem; /* Выравниваем по высоте с началом контента */
+  }
+
+  .sticky-sidebar {
+    position: sticky;
+    top: 6rem; /* Отступ от шапки при скролле */
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .sidebar-info {
+    padding: 1rem;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    text-align: center;
+    border: 1px dashed rgba(59, 130, 246, 0.2);
+    border-radius: 12px;
+  }
+
+  .footer-rings { 
+    padding: 4rem 0; 
+    display: flex; 
+    justify-content: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 2rem;
+  }
+
+  /* Адаптивность для мобилок */
+  @media (max-width: 1024px) {
+    .content-layout {
+      grid-template-columns: 1fr; /* Одна колонка */
+      gap: 1rem;
+    }
+
+    .sidebar {
+      padding-top: 0;
+      order: 2; /* Чекер будет после опыта, но перед контактами, если нужно */
+    }
+
+    .main-content {
+      order: 1;
+    }
+    
+    .sticky-sidebar {
+      position: relative;
+      top: 0;
+      margin-bottom: 2rem;
+    }
+  }
 </style>
