@@ -1,12 +1,7 @@
 ---
-/**
- * Обновленный компонент Webring
- * Используем официальные редирект-ссылки после одобрения PR
- */
 const prevLink = "https://astro-webrings.lou.gg/prev?site=ivan-deliver-email&ring=built-with-astro";
 const nextLink = "https://astro-webrings.lou.gg/next?site=ivan-deliver-email&ring=built-with-astro";
 const hubLink = "https://astro-webrings.lou.gg/";
-
 const accentColor = "#3b82f6";
 ---
 
@@ -14,100 +9,97 @@ const accentColor = "#3b82f6";
   <div class="webring-card">
     <span class="webring-label">Astro Webring</span>
     <div class="webring-nav">
-      <a href={prevLink} class="nav-btn" title="Previous Site">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      <a href={prevLink} class="nav-btn" title="Previous">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </a>
       
-      <a href={hubLink} target="_blank" class="hub-btn" aria-label="Astro Webring">
-  <div class="astro-icon">
+      <a href={hubLink} target="_blank" class="hub-btn" aria-label="Astro Webring Hub">
         <div class="astro-icon">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg>
         </div>
       </a>
-	  <a href={hubLink} target="_blank" class="hub-btn" aria-label="Visit Astro Webring Hub">
-  <div class="astro-icon">
-    <svg ...></svg>
-  </div>
-</a>
 
-      <a href={nextLink} class="nav-btn" title="Next Site">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <a href={nextLink} class="nav-btn" title="Next">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
       </a>
     </div>
   </div>
 </div>
 
 <style define:vars={{ accentColor }}>
-  .webring-container {
-    display: flex;
-    justify-content: center;
-    padding: 1rem;
-  }
-
+  .webring-container { display: flex; justify-content: center; padding: 2rem 1rem; }
+  
   .webring-card {
     background: rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(59, 130, 246, 0.2);
     border-radius: 50px;
-    padding: 0.75rem 1.5rem;
+    padding: 0.5rem 1rem 0.5rem 1.5rem;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
+    gap: 1.5rem;
     transition: all 0.3s ease;
   }
 
   .webring-card:hover {
     border-color: var(--accentColor);
     background: rgba(59, 130, 246, 0.05);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
   }
 
   .webring-label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
     color: #94a3b8;
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
   }
 
   .webring-nav {
     display: flex;
     align-items: center;
-    gap: 1.25rem;
+    gap: 0.5rem;
   }
 
   .nav-btn {
-    width: 24px;
-    height: 24px;
-    color: #94a3b8;
-    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
+    color: #94a3b8;
+    border-radius: 50%;
+    transition: all 0.2s ease;
   }
 
   .nav-btn:hover {
-    color: var(--accentColor);
-    transform: scale(1.1);
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
   }
 
+  .nav-btn svg { width: 20px; height: 20px; }
+
   .hub-btn {
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    text-decoration: none;
-  }
-
-  .astro-icon {
-    width: 28px;
-    height: 28px;
+    background: var(--accentColor);
     color: white;
-    transition: transform 0.3s ease;
+    border-radius: 50%;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
-  .hub-btn:hover .astro-icon {
-    transform: rotate(10deg);
+  .hub-btn:hover {
+    transform: scale(1.15);
+    box-shadow: 0 0 15px var(--accentColor);
   }
 
-  svg { width: 100%; height: 100%; }
+  .astro-icon svg { width: 20px; height: 20px; }
+
+  @media (max-width: 480px) {
+    .webring-card { padding: 0.5rem 1rem; gap: 1rem; }
+    .webring-label { display: none; } /* Экономим место на мобилках */
+  }
 </style>
