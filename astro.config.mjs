@@ -8,23 +8,29 @@ import { defineConfig, envField } from "astro/config";
 export default defineConfig({
   site: 'https://ivandeliver.email',
   
-  // 1. Указываем режим сервера, так как у тебя есть API (Spotify) и секреты
+  // Режим сервера для API (Spotify)
   output: 'server',
 
-  // 2. Настраиваем адаптер
   adapter: cloudflare({
-    // Включаем прокси для локальной разработки (чтобы работали env секреты)
     platformProxy: {
       enabled: true,
     },
-    // Используем встроенный сервис Cloudflare для оптимизации изображений вместо Sharp
-    imageService: 'cloudflare'
+    // Используем встроенный сервис Cloudflare для картинок
+    imageService: 'cloudflare',
+    // Отключаем поиск SESSION KV, чтобы убрать лишние ворнинги в логах
+    persistedStoredValues: false 
   }),
   
   integrations: [
     react(),
     sitemap()
   ],
+
+  build: {
+    // Решает проблему "Render blocking requests": инлайнит CSS прямо в HTML, 
+    // так как файл стилей у тебя крошечный. Это ускорит LCP.
+    inlineStylesheets: 'always'
+  },
   
   env: {
     schema: {
