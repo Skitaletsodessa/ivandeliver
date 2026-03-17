@@ -98,4 +98,155 @@ import Layout from '../layouts/Layout.astro';
 
   function setRange(days) {
     const to = new Date().toISOString().split('T')[0];
-    const from
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+    const from = fromDate.toISOString().split('T')[0];
+    
+    (document.getElementById('dateFrom') as HTMLInputElement).value = from;
+    (document.getElementById('dateTo') as HTMLInputElement).value = to;
+    
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const from = (document.getElementById('dateFrom') as HTMLInputElement).value;
+    const to = (document.getElementById('dateTo') as HTMLInputElement).value;
+    const search = (document.getElementById('tableSearch') as HTMLInputElement).value.toLowerCase();
+
+    filteredData = rawData.filter(r => {
+      const dateMatch = (!from || r.date >= from) && (!to || r.date <= to);
+      const searchMatch = r.ip.toLowerCase().includes(search) || r.filter_result.toLowerCase().includes(search);
+      return dateMatch && searchMatch;
+    });
+
+    sortData(currentSort.key, currentSort.dir);
+    currentPage = 1;
+    renderTable();
+    renderChart(filteredData);
+  }
+
+  function sortData(key, dir) {
+    const modifier = dir === 'desc' ? 1 : -1;
+    filteredData.sort((a, b) => {
+      if (key === 'traps' || key === 'complaints') return (b[key] - a[key]) * modifier;
+      if (a[key] < b[key]) return 1 * modifier;
+      if (a[key] > b[key]) return -1 * modifier;
+      return 0;
+    });
+  }
+
+  function renderTable() {
+    const tbody = document.querySelector('#sndsTable tbody');
+    if (!tbody) return;
+    const start = (currentPage - 1) * pageSize;
+    const pageData = filteredData.slice(start, start + pageSize);
+
+    tbody.innerHTML = pageData.map(row => `
+      <tr class="${row.traps > 0 ? 'row-danger' : ''}">
+        <td>${row.date}</td>
+        <td><code>${row.ip}</code></td>
+        <td style="text-align: center;"><span class="badge ${row.filter_result.toLowerCase()}">${row.filter_result}</span></td>
+        <td style="text-align: center;">${row.complaints}</td>
+        <td style="text-align: center;"><strong>${row.traps}</strong> ${row.traps > 0 ? '⚠️' : ''}</td>
+      </tr>
+    `).join('');
+
+    document.getElementById('pageInfo').innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
+  }
+
+  function downloadCsv() {
+    const headers = ['Date', 'IP Address', 'Status', 'Complaints', 'Traps'];
+    const rows = filteredData.map(r => [r.date, r.ip, r.filter_result, r.complaints, r.traps].join(','));
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `snds_report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+  }
+
+  function renderChart(data) {
+    const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
+    const labels = [...new Set(data.map(item => item.date))].sort();
+    const complaints = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.complaints, 0));
+    const traps = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.traps, 0));
+
+    if (myChart) myChart.destroy();
+    myChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Complaints', data: complaints, borderColor: '#3b82f6', tension: 0.2, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.05)' },
+          { label: 'Spam Traps', data: traps, borderColor: '#ef4444', tension: 0.2, fill: true, backgroundColor: 'rgba(239, 68, 68, 0.05)' }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }
+
+  function setupEventListeners() {
+    document.querySelectorAll('.quick-filter').forEach(btn => {
+      btn.onclick = () => setRange(parseInt(btn.dataset.days));
+    });
+    document.getElementById('dateFrom').onchange = applyFilters;
+    document.getElementById('dateTo').onchange = applyFilters;
+    document.getElementById('tableSearch').oninput = applyFilters;
+    document.getElementById('downloadCsv').onclick = downloadCsv;
+    document.getElementById('resetDates').onclick = () => {
+      (document.getElementById('dateFrom') as HTMLInputElement).value = '';
+      (document.getElementById('dateTo') as HTMLInputElement).value = '';
+      applyFilters();
+    };
+
+    document.querySelectorAll('th.sortable').forEach(th => {
+      th.onclick = () => {
+        const key = th.dataset.sort;
+        currentSort.dir = (currentSort.key === key && currentSort.dir === 'desc') ? 'asc' : 'desc';
+        currentSort.key = key;
+        sortData(key, currentSort.dir);
+        renderTable();
+      };
+    });
+
+    document.getElementById('prevPage').onclick = () => { if (currentPage > 1) { currentPage--; renderTable(); } };
+    document.getElementById('nextPage').onclick = () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } };
+  }
+
+  init();
+</script>
+
+<style is:global>
+  .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c !important; font-family: sans-serif; }
+  .card { background: white !important; border-radius: 12px; border: 1px solid #cbd5e0 !important; padding: 1.5rem; margin-bottom: 1.5rem; }
+  
+  .filter-bar .filter-row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
+  .filter-group { display: flex; flex-direction: column; gap: 0.5rem; }
+  .filter-group label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #718096; }
+  
+  .btn-group { display: flex; gap: 4px; }
+  .input-row { display: flex; align-items: center; gap: 0.5rem; }
+
+  .chart-container { height: 350px; }
+  .table-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  
+  .input-field { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; }
+  .btn { padding: 8px 14px; background: white; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+  .btn:hover { background: #f7fafc; border-color: #a0aec0; }
+  .btn-primary { background: #3b82f6; color: white; border: none; font-weight: bold; }
+  .btn-primary:hover { background: #2563eb; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f7fafc !important; padding: 12px; border: 1px solid #cbd5e0 !important; font-size: 0.8rem; text-transform: uppercase; }
+  td { padding: 12px; border: 1px solid #e2e8f0 !important; }
+
+  .row-danger { background-color: #fff5f5 !important; }
+  .row-danger td { color: #c53030 !important; font-weight: 600; }
+  
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; min-width: 70px; text-align: center; }
+  .green { background: #c6f6d5 !important; color: #22543d !important; }
+  .yellow { background: #feebc8 !important; color: #744210 !important; }
+  .red { background: #fed7d7 !important; color: #822727 !important; }
+  code { background: #ebf8ff; color: #2b6cb0; padding: 2px 5px; border-radius: 4px; }
+</style>
