@@ -6,7 +6,7 @@ import Layout from '../layouts/Layout.astro';
   <main class="monitor-wrapper">
     <div class="header">
       <h1>SNDS Deliverability Hub</h1>
-      <p>Статус репутации IP. Строки с ловушками (Traps > 0) выделены цветом.</p>
+      <p>Real-time IP reputation monitoring from Microsoft SNDS.</p>
     </div>
 
     <div class="card chart-container">
@@ -14,12 +14,14 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div class="card table-container">
-      <div class="table-header">
-        <h3>Детальный лог</h3>
+      <div class="table-controls">
+        <div class="search-box">
+          <input type="text" id="tableSearch" placeholder="Search IP, Date or Status..." class="input-field" />
+        </div>
         <div class="pagination-controls">
-          <button id="prevPage" class="btn">← Назад</button>
-          <span id="pageInfo">Страница 1</span>
-          <button id="nextPage" class="btn">Вперед →</button>
+          <button id="prevPage" class="btn">←</button>
+          <span id="pageInfo">Page 1</span>
+          <button id="nextPage" class="btn">→</button>
         </div>
       </div>
       
@@ -27,11 +29,11 @@ import Layout from '../layouts/Layout.astro';
         <table id="sndsTable">
           <thead>
             <tr>
-              <th>Дата</th>
-              <th>IP Адрес</th>
-              <th>Статус</th>
-              <th>Жалобы</th>
-              <th>Ловушки</th>
+              <th data-sort="date" class="sortable">Date ↕</th>
+              <th data-sort="ip" class="sortable">IP Address ↕</th>
+              <th data-sort="filter_result" class="sortable">Status ↕</th>
+              <th data-sort="complaints" class="sortable">Complaints ↕</th>
+              <th data-sort="traps" class="sortable">Traps ↕</th>
             </tr>
           </thead>
           <tbody>
@@ -46,27 +48,43 @@ import Layout from '../layouts/Layout.astro';
   import Chart from 'chart.js/auto';
 
   const API_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
-  let allData = [];
+  let rawData = [];
+  let filteredData = [];
   let currentPage = 1;
   const pageSize = 100;
+  let currentSort = { key: 'traps', dir: 'desc' };
 
   async function init() {
     try {
       const response = await fetch(API_URL);
-      const data = await response.json();
+      rawData = await response.json();
       
-      // 1. Сортировка: сначала те, где есть Traps > 0, затем по дате
-      allData = data.sort((a, b) => {
-        if (b.traps !== a.traps) return b.traps - a.traps;
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-
-      renderChart(allData);
-      renderTable();
-      updatePaginationControls();
+      // Начальная сортировка: Traps (desc), затем Complaints (desc)
+      applySort('traps', 'desc'); 
+      
+      renderChart(rawData);
+      setupEventListeners();
     } catch (err) {
       console.error("Data load error:", err);
     }
+  }
+
+  function applySort(key, dir = 'desc') {
+    currentSort = { key, dir };
+    const modifier = dir === 'desc' ? 1 : -1;
+
+    filteredData = [...(filteredData.length ? filteredData : rawData)].sort((a, b) => {
+      // Специальная логика для Traps и Complaints по умолчанию
+      if (key === 'traps' || key === 'complaints') {
+        return (b[key] - a[key]) * modifier;
+      }
+      if (a[key] < b[key]) return 1 * modifier;
+      if (a[key] > b[key]) return -1 * modifier;
+      return 0;
+    });
+
+    currentPage = 1;
+    renderTable();
   }
 
   function renderTable() {
@@ -74,49 +92,50 @@ import Layout from '../layouts/Layout.astro';
     if (!tbody) return;
 
     const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    const pageData = allData.slice(start, end);
+    const pageData = filteredData.slice(start, start + pageSize);
 
-    tbody.innerHTML = pageData.map(row => {
-      // Подсветка строки, если есть ловушки
-      const rowClass = row.traps > 0 ? 'row-danger' : '';
-      
-      return `
-        <tr class="${rowClass}">
-          <td>${row.date}</td>
-          <td><code>${row.ip}</code></td>
-          <td style="text-align: center;">
-            <span class="badge ${row.filter_result.toLowerCase()}">${row.filter_result}</span>
-          </td>
-          <td style="text-align: center;">${row.complaints}</td>
-          <td style="text-align: center;"><strong>${row.traps}</strong> ${row.traps > 0 ? '⚠️' : ''}</td>
-        </tr>
-      `;
-    }).join('');
+    tbody.innerHTML = pageData.map(row => `
+      <tr class="${row.traps > 0 ? 'row-danger' : ''}">
+        <td>${row.date}</td>
+        <td><code>${row.ip}</code></td>
+        <td style="text-align: center;"><span class="badge ${row.filter_result.toLowerCase()}">${row.filter_result}</span></td>
+        <td style="text-align: center;">${row.complaints}</td>
+        <td style="text-align: center;"><strong>${row.traps}</strong> ${row.traps > 0 ? '⚠️' : ''}</td>
+      </tr>
+    `).join('');
 
-    document.getElementById('pageInfo').innerText = `Страница ${currentPage} из ${Math.ceil(allData.length / pageSize)}`;
+    document.getElementById('pageInfo').innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
   }
 
-  function updatePaginationControls() {
-    document.getElementById('prevPage').onclick = () => {
-      if (currentPage > 1) {
-        currentPage--;
-        renderTable();
-        window.scrollTo({ top: document.querySelector('.table-container').offsetTop, behavior: 'smooth' });
-      }
+  function setupEventListeners() {
+    // Поиск
+    document.getElementById('tableSearch').oninput = (e) => {
+      const val = e.target.value.toLowerCase();
+      filteredData = rawData.filter(r => 
+        r.ip.toLowerCase().includes(val) || 
+        r.date.includes(val) || 
+        r.filter_result.toLowerCase().includes(val)
+      );
+      currentPage = 1;
+      renderTable();
     };
-    document.getElementById('nextPage').onclick = () => {
-      if (currentPage * pageSize < allData.length) {
-        currentPage++;
-        renderTable();
-        window.scrollTo({ top: document.querySelector('.table-container').offsetTop, behavior: 'smooth' });
-      }
-    };
+
+    // Сортировка по клику на заголовки
+    document.querySelectorAll('th.sortable').forEach(th => {
+      th.onclick = () => {
+        const key = th.dataset.sort;
+        const dir = (currentSort.key === key && currentSort.dir === 'desc') ? 'asc' : 'desc';
+        applySort(key, dir);
+      };
+    });
+
+    // Пагинация
+    document.getElementById('prevPage').onclick = () => { if (currentPage > 1) { currentPage--; renderTable(); } };
+    document.getElementById('nextPage').onclick = () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } };
   }
 
   function renderChart(data) {
     const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
-    if (!ctx) return;
     const labels = [...new Set(data.map(item => item.date))].sort();
     const complaints = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.complaints, 0));
     const traps = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.traps, 0));
@@ -126,8 +145,8 @@ import Layout from '../layouts/Layout.astro';
       data: {
         labels: labels,
         datasets: [
-          { label: 'Complaints', data: complaints, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true },
-          { label: 'Spam Traps', data: traps, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true }
+          { label: 'Complaints', data: complaints, borderColor: '#3b82f6', tension: 0.3, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.05)' },
+          { label: 'Spam Traps', data: traps, borderColor: '#ef4444', tension: 0.3, fill: true, backgroundColor: 'rgba(239, 68, 68, 0.05)' }
         ]
       },
       options: { responsive: true, maintainAspectRatio: false }
@@ -138,28 +157,30 @@ import Layout from '../layouts/Layout.astro';
 </script>
 
 <style is:global>
-  .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c !important; }
-  .card { background: white !important; border-radius: 12px; border: 1px solid #cbd5e0 !important; padding: 1.5rem; margin-bottom: 2rem; }
-  .chart-container { height: 400px; }
+  .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c !important; font-family: sans-serif; }
+  .card { background: white !important; border-radius: 12px; border: 1px solid #cbd5e0 !important; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .chart-container { height: 350px; }
   
-  /* Хедер таблицы с пагинацией */
-  .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-  .pagination-controls { display: flex; align-items: center; gap: 1rem; }
-  .btn { padding: 6px 12px; background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; font-size: 14px; }
-  .btn:hover { background: #e2e8f0; }
+  .table-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; gap: 1rem; }
+  .input-field { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; width: 300px; outline: none; }
+  .input-field:focus { border-color: #3b82f6; ring: 2px rgba(59, 130, 246, 0.2); }
 
-  table { width: 100%; border-collapse: collapse; background: white !important; }
-  th { background: #f7fafc !important; padding: 12px; border: 1px solid #cbd5e0 !important; text-align: left; }
-  td { padding: 12px; border: 1px solid #e2e8f0 !important; color: #1a202c !important; }
+  .sortable { cursor: pointer; user-select: none; transition: background 0.2s; }
+  .sortable:hover { background: #edf2f7 !important; }
 
-  /* Подсветка проблемных строк */
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f7fafc !important; padding: 12px; border: 1px solid #cbd5e0 !important; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.025em; }
+  td { padding: 12px; border: 1px solid #e2e8f0 !important; font-size: 0.9rem; }
+
   .row-danger { background-color: #fff5f5 !important; }
-  .row-danger td { color: #c53030 !important; font-weight: 500; }
+  .row-danger td { color: #c53030 !important; font-weight: 600; }
 
-  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; min-width: 70px; text-align: center; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; min-width: 70px; text-align: center; border: 1px solid rgba(0,0,0,0.1); }
   .green { background: #c6f6d5 !important; color: #22543d !important; }
   .yellow { background: #feebc8 !important; color: #744210 !important; }
   .red { background: #fed7d7 !important; color: #822727 !important; }
   
   code { background: #ebf8ff; color: #2b6cb0; padding: 2px 5px; border-radius: 4px; font-family: monospace; }
+  .btn { padding: 6px 16px; background: white; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; }
+  .btn:hover { background: #f7fafc; }
 </style>
