@@ -94,21 +94,18 @@ import Layout from '../layouts/Layout.astro';
     try {
       const response = await fetch(API_URL);
       rawData = await response.json();
-      
       setRange(7);
-      renderSummary(); // Инициализируем сводку
+      renderSummary();
       setupEventListeners();
     } catch (err) {
       console.error("Data load error:", err);
     }
   }
 
-  // LOGIC: Summary Calculation
   function renderSummary() {
     const container = document.getElementById('summary-stats');
     if (!container || rawData.length === 0) return;
 
-    // Находим последнюю дату, за которую есть данные
     const latestDate = [...new Set(rawData.map(r => r.date))].sort().pop();
     const todayData = rawData.filter(r => r.date === latestDate);
 
@@ -117,9 +114,9 @@ import Layout from '../layouts/Layout.astro';
     const jmrCount = todayData.filter(r => r.jmr_p1_sender && r.jmr_p1_sender !== '0' && r.jmr_p1_sender !== '').length;
 
     container.innerHTML = `
-      <div class="stat-card">
+      <div class="stat-card info">
         <span class="stat-label">Latest Data Date</span>
-        <span class="stat-value" style="color: #4a5568">${latestDate}</span>
+        <span class="stat-value">${latestDate}</span>
       </div>
       <div class="stat-card ${redCount > 0 ? 'danger' : 'success'}">
         <span class="stat-label">RED IPs Today</span>
@@ -136,7 +133,6 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  // --- Навигация и Сортировка (без изменений логики) ---
   function setRange(days) {
     const to = new Date().toISOString().split('T')[0];
     const fromDate = new Date();
@@ -172,145 +168,4 @@ import Layout from '../layouts/Layout.astro';
       const hasJmr = (val) => (val && val !== '0' && val !== '') ? 1 : 0;
       if (key === 'date') {
         if (a.date !== b.date) return b.date.localeCompare(a.date) * modifier;
-      } else if (key === 'jmr_p1_sender') {
-        const jA = hasJmr(a.jmr_p1_sender);
-        const jB = hasJmr(b.jmr_p1_sender);
-        if (jA !== jB) return (jB - jA) * modifier;
-      } else if (key === 'ip' || key === 'filter_result') {
-        if (a[key] !== b[key]) return String(a[key]).localeCompare(String(b[key])) * modifier;
-      } else {
-        if (a[key] !== b[key]) return (b[key] - a[key]) * modifier;
-      }
-      // Chain Fallback
-      if (a.date !== b.date) return b.date.localeCompare(a.date);
-      const jA = hasJmr(a.jmr_p1_sender);
-      const jB = hasJmr(b.jmr_p1_sender);
-      if (jA !== jB) return jB - jA;
-      if (a.traps !== b.traps) return b.traps - a.traps;
-      return b.complaints - a.complaints;
-    });
-  }
-
-  function renderTable() {
-    const tbody = document.querySelector('#sndsTable tbody');
-    if (!tbody) return;
-    const start = (currentPage - 1) * pageSize;
-    const pageData = filteredData.slice(start, start + pageSize);
-
-    tbody.innerHTML = pageData.map(row => {
-      const hasJmr = row.jmr_p1_sender && row.jmr_p1_sender !== '0' && row.jmr_p1_sender !== '';
-      return `
-        <tr class="${(row.traps > 0 || hasJmr) ? 'row-danger' : ''}">
-          <td>${row.date}</td>
-          <td><code>${row.ip}</code></td>
-          <td style="text-align: center;"><span class="badge ${row.filter_result.toLowerCase()}">${row.filter_result}</span></td>
-          <td style="text-align: center;">${row.complaints}%</td>
-          <td style="text-align: center;">${row.traps}</td>
-          <td style="text-align: center; font-size: 0.85rem; position: relative;">
-            ${hasJmr ? `<span class="jmr-text" title="${row.jmr_p1_sender}">${row.jmr_p1_sender}</span>` : '0'}
-          </td>
-        </tr>
-      `;
-    }).join('');
-    const pageInfo = document.getElementById('pageInfo');
-    if (pageInfo) pageInfo.innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
-  }
-
-  function renderChart(data) {
-    const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
-    if (!ctx || !data.length) return;
-    const labels = [...new Set(data.map(item => item.date))].sort();
-    const complaints = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.complaints, 0));
-    const jmrHits = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => {
-      return s + (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '' ? 1 : 0);
-    }, 0));
-    if (myChart) myChart.destroy();
-    myChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [
-          { label: 'Sum of Complaints %', data: complaints, borderColor: '#3b82f6', tension: 0.2 },
-          { label: 'JMR Events', data: jmrHits, borderColor: '#ef4444', tension: 0.2, fill: true, backgroundColor: 'rgba(239, 68, 68, 0.05)' }
-        ]
-      },
-      options: { responsive: true, maintainAspectRatio: false }
-    });
-  }
-
-  function setupEventListeners() {
-    document.querySelectorAll('.quick-filter').forEach(btn => {
-      (btn as HTMLElement).onclick = () => setRange(parseInt((btn as HTMLElement).dataset.days || '7'));
-    });
-    document.getElementById('dateFrom')?.addEventListener('change', applyFilters);
-    document.getElementById('dateTo')?.addEventListener('change', applyFilters);
-    document.getElementById('tableSearch')?.addEventListener('input', applyFilters);
-    document.getElementById('downloadCsv')?.addEventListener('click', () => {
-      const headers = ['Date', 'IP', 'Status', 'Complaints%', 'Traps', 'JMR_Data'];
-      const csv = [headers.join(','), ...filteredData.map(r => [r.date, r.ip, r.filter_result, r.complaints, r.traps, r.jmr_p1_sender].join(','))].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'snds_report.csv'; a.click();
-    });
-    document.getElementById('resetDates')?.addEventListener('click', () => {
-      (document.getElementById('dateFrom') as HTMLInputElement).value = '';
-      (document.getElementById('dateTo') as HTMLInputElement).value = '';
-      applyFilters();
-    });
-    document.querySelectorAll('th.sortable').forEach(th => {
-      (th as HTMLElement).onclick = () => {
-        const key = (th as HTMLElement).dataset.sort || 'date';
-        currentSort.dir = (currentSort.key === key && currentSort.dir === 'desc') ? 'asc' : 'desc';
-        currentSort.key = key;
-        sortData(key, currentSort.dir);
-        renderTable();
-      };
-    });
-    document.getElementById('prevPage')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderTable(); } });
-    document.getElementById('nextPage')?.addEventListener('click', () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } });
-    document.getElementById('logoutBtn')!.onclick = () => { if(confirm("Logout?")) window.location.href = window.location.origin + "/cdn-cgi/access/logout"; };
-  }
-
-  init();
-</script>
-
-<style is:global>
-  .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c; font-family: system-ui, sans-serif; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
-  
-  /* Summary Grid Styles */
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background: white; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; }
-  .stat-label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #718096; }
-  .stat-value { font-size: 1.5rem; font-weight: 800; color: #2d3748; }
-  
-  .stat-card.success { border-left: 5px solid #48bb78; }
-  .stat-card.danger { border-left: 5px solid #f56565; }
-  .stat-card.danger .stat-value { color: #c53030; }
-  .stat-card.warning { border-left: 5px solid #ed8936; }
-
-  .card { background: white; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1.5rem; margin-bottom: 1.5rem; }
-  .filter-bar .filter-row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
-  .filter-group { display: flex; flex-direction: column; gap: 0.5rem; }
-  .filter-group label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #4a5568; }
-  .btn-group { display: flex; gap: 6px; }
-  .input-field { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; }
-  .btn { padding: 8px 14px; background: white; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
-  .btn-primary { background: #3b82f6; color: white; border: none; font-weight: bold; }
-  .btn-outline { color: #ef4444; border: 1px solid #ef4444; font-weight: bold; }
-  .btn-outline:hover { background: #fee2e2; }
-
-  .chart-container { height: 350px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { background: #f7fafc; padding: 12px; border: 1px solid #cbd5e0; font-size: 0.8rem; text-transform: uppercase; cursor: pointer; }
-  td { padding: 12px; border: 1px solid #e2e8f0; }
-  .row-danger { background-color: #fff5f5; color: #c53030; font-weight: 600; }
-  
-  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; min-width: 70px; text-align: center; }
-  .green { background: #c6f6d5; color: #22543d; }
-  .yellow { background: #feebc8; color: #744210; }
-  .red { background: #fed7d7; color: #822727; }
-  
-  .jmr-text { display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #2b6cb0; font-weight: 600; cursor: help; margin: 0 auto; }
-  .jmr-text:hover { overflow: visible; white-space: normal; background: #fff; position: absolute; z-index: 50; border: 1px solid #cbd5e0; padding: 6px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); left: 50%; transform: translateX(-50%); width: max-content; max-width: 300px; }
-</style>
+      } else if (key
