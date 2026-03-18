@@ -133,16 +133,6 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  function setRange(days) {
-    const to = new Date().toISOString().split('T')[0];
-    const fromDate = new Date();
-    fromDate.setDate(fromDate.getDate() - days);
-    const from = fromDate.toISOString().split('T')[0];
-    (document.getElementById('dateFrom') as HTMLInputElement).value = from;
-    (document.getElementById('dateTo') as HTMLInputElement).value = to;
-    applyFilters();
-  }
-
   function applyFilters() {
     const from = (document.getElementById('dateFrom') as HTMLInputElement)?.value || '';
     const to = (document.getElementById('dateTo') as HTMLInputElement)?.value || '';
@@ -162,24 +152,101 @@ import Layout from '../layouts/Layout.astro';
     renderChart(filteredData);
   }
 
+  // ОБНОВЛЕННЫЙ ГРАФИК: СРЕДНИЙ ПРОЦЕНТ И КОЛИЧЕСТВО IP
+  function renderChart(data) {
+    const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
+    if (!ctx || !data.length) return;
+
+    const labels = [...new Set(data.map(item => item.date))].sort();
+    
+    // 1. СРЕДНИЙ ПРОЦЕНТ ЖАЛОБ ПО ВСЕМ IP
+    const avgComplaints = labels.map(d => {
+      const dayData = data.filter(i => i.date === d);
+      const sum = dayData.reduce((s, c) => s + c.complaints, 0);
+      return (sum / dayData.length).toFixed(3);
+    });
+
+    // 2. СУММА IP АДРЕСОВ
+    const ipCounts = labels.map(d => data.filter(i => i.date === d).length);
+
+    // 3. JMR ИНЦИДЕНТЫ
+    const jmrHits = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => {
+      return s + (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '' ? 1 : 0);
+    }, 0));
+
+    if (myChart) myChart.destroy();
+    myChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { 
+            label: 'Avg Complaints %', 
+            data: avgComplaints, 
+            borderColor: '#3b82f6', 
+            backgroundColor: '#3b82f6',
+            tension: 0.2, 
+            yAxisID: 'yPerc' 
+          },
+          { 
+            label: 'Total IP Count', 
+            data: ipCounts, 
+            borderColor: '#10b981', 
+            backgroundColor: 'rgba(16, 185, 129, 0.1)', 
+            fill: true,
+            tension: 0.2, 
+            yAxisID: 'yCount' 
+          },
+          { 
+            label: 'JMR Events', 
+            data: jmrHits, 
+            borderColor: '#ef4444', 
+            backgroundColor: '#ef4444',
+            tension: 0.2, 
+            yAxisID: 'yCount'
+          }
+        ]
+      },
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          yPerc: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: { display: true, text: 'Avg Complaints %', color: '#1a202c', font: { weight: 'bold' } },
+            ticks: { color: '#1a202c' }
+          },
+          yCount: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            title: { display: true, text: 'Count (IPs / JMR)', color: '#1a202c', font: { weight: 'bold' } },
+            ticks: { color: '#1a202c' }
+          },
+          x: { ticks: { color: '#1a202c' } }
+        },
+        plugins: {
+          legend: { labels: { color: '#1a202c', font: { weight: 'bold' } } }
+        }
+      }
+    });
+  }
+
+  // --- Остальные функции (Sort, Table, Events) ---
   function sortData(key, dir) {
     const modifier = dir === 'desc' ? 1 : -1;
     filteredData.sort((a, b) => {
       const hasJmr = (val) => (val && val !== '0' && val !== '') ? 1 : 0;
-      if (key === 'date') {
-        if (a.date !== b.date) return b.date.localeCompare(a.date) * modifier;
-      } else if (key === 'jmr_p1_sender') {
-        const jA = hasJmr(a.jmr_p1_sender);
-        const jB = hasJmr(b.jmr_p1_sender);
-        if (jA !== jB) return (jB - jA) * modifier;
-      } else if (key === 'ip' || key === 'filter_result') {
-        if (a[key] !== b[key]) return String(a[key]).localeCompare(String(b[key])) * modifier;
-      } else {
-        if (a[key] !== b[key]) return (b[key] - a[key]) * modifier;
-      }
+      if (key === 'date') { if (a.date !== b.date) return b.date.localeCompare(a.date) * modifier; }
+      else if (key === 'jmr_p1_sender') { const jA = hasJmr(a.jmr_p1_sender), jB = hasJmr(b.jmr_p1_sender); if (jA !== jB) return (jB - jA) * modifier; }
+      else if (key === 'ip' || key === 'filter_result') { if (a[key] !== b[key]) return String(a[key]).localeCompare(String(b[key])) * modifier; }
+      else { if (a[key] !== b[key]) return (b[key] - a[key]) * modifier; }
       if (a.date !== b.date) return b.date.localeCompare(a.date);
-      const jA = hasJmr(a.jmr_p1_sender);
-      const jB = hasJmr(b.jmr_p1_sender);
+      const jA = hasJmr(a.jmr_p1_sender), jB = hasJmr(b.jmr_p1_sender);
       if (jA !== jB) return jB - jA;
       if (a.traps !== b.traps) return b.traps - a.traps;
       return b.complaints - a.complaints;
@@ -191,7 +258,6 @@ import Layout from '../layouts/Layout.astro';
     if (!tbody) return;
     const start = (currentPage - 1) * pageSize;
     const pageData = filteredData.slice(start, start + pageSize);
-
     tbody.innerHTML = pageData.map(row => {
       const hasJmr = row.jmr_p1_sender && row.jmr_p1_sender !== '0' && row.jmr_p1_sender !== '';
       return `
@@ -204,39 +270,24 @@ import Layout from '../layouts/Layout.astro';
           <td style="text-align: center; font-size: 0.85rem; position: relative;">
             ${hasJmr ? `<span class="jmr-text" title="${row.jmr_p1_sender}">${row.jmr_p1_sender}</span>` : '0'}
           </td>
-        </tr>
-      `;
+        </tr>`;
     }).join('');
     const pageInfo = document.getElementById('pageInfo');
     if (pageInfo) pageInfo.innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
   }
 
-  function renderChart(data) {
-    const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
-    if (!ctx || !data.length) return;
-    const labels = [...new Set(data.map(item => item.date))].sort();
-    const complaints = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.complaints, 0));
-    const jmrHits = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => {
-      return s + (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '' ? 1 : 0);
-    }, 0));
-    if (myChart) myChart.destroy();
-    myChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [
-          { label: 'Sum of Complaints %', data: complaints, borderColor: '#3b82f6', tension: 0.2 },
-          { label: 'JMR Events', data: jmrHits, borderColor: '#ef4444', tension: 0.2, fill: true, backgroundColor: 'rgba(239, 68, 68, 0.05)' }
-        ]
-      },
-      options: { responsive: true, maintainAspectRatio: false }
-    });
+  function setRange(days) {
+    const to = new Date().toISOString().split('T')[0];
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+    const from = fromDate.toISOString().split('T')[0];
+    (document.getElementById('dateFrom') as HTMLInputElement).value = from;
+    (document.getElementById('dateTo') as HTMLInputElement).value = to;
+    applyFilters();
   }
 
   function setupEventListeners() {
-    document.querySelectorAll('.quick-filter').forEach(btn => {
-      (btn as HTMLElement).onclick = () => setRange(parseInt((btn as HTMLElement).dataset.days || '7'));
-    });
+    document.querySelectorAll('.quick-filter').forEach(btn => { (btn as HTMLElement).onclick = () => setRange(parseInt((btn as HTMLElement).dataset.days || '7')); });
     document.getElementById('dateFrom')?.addEventListener('change', applyFilters);
     document.getElementById('dateTo')?.addEventListener('change', applyFilters);
     document.getElementById('tableSearch')?.addEventListener('input', applyFilters);
@@ -247,20 +298,8 @@ import Layout from '../layouts/Layout.astro';
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'snds_report.csv'; a.click();
     });
-    document.getElementById('resetDates')?.addEventListener('click', () => {
-      (document.getElementById('dateFrom') as HTMLInputElement).value = '';
-      (document.getElementById('dateTo') as HTMLInputElement).value = '';
-      applyFilters();
-    });
-    document.querySelectorAll('th.sortable').forEach(th => {
-      (th as HTMLElement).onclick = () => {
-        const key = (th as HTMLElement).dataset.sort || 'date';
-        currentSort.dir = (currentSort.key === key && currentSort.dir === 'desc') ? 'asc' : 'desc';
-        currentSort.key = key;
-        sortData(key, currentSort.dir);
-        renderTable();
-      };
-    });
+    document.getElementById('resetDates')?.addEventListener('click', () => { (document.getElementById('dateFrom') as HTMLInputElement).value = ''; (document.getElementById('dateTo') as HTMLInputElement).value = ''; applyFilters(); });
+    document.querySelectorAll('th.sortable').forEach(th => { (th as HTMLElement).onclick = () => { const key = (th as HTMLElement).dataset.sort || 'date'; currentSort.dir = (currentSort.key === key && currentSort.dir === 'desc') ? 'asc' : 'desc'; currentSort.key = key; sortData(key, currentSort.dir); renderTable(); }; });
     document.getElementById('prevPage')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderTable(); } });
     document.getElementById('nextPage')?.addEventListener('click', () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } });
     document.getElementById('logoutBtn')!.onclick = () => { if(confirm("Logout?")) window.location.href = window.location.origin + "/cdn-cgi/access/logout"; };
@@ -275,61 +314,30 @@ import Layout from '../layouts/Layout.astro';
   
   /* Summary Grid - ПУЛЕНЕПРОБИВАЕМЫЙ КОНТРАСТ */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background-color: #ffffff !important; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
   
-  .stat-card { 
-    background-color: #ffffff !important; 
-    padding: 1.25rem; 
-    border-radius: 12px; 
-    border: 1px solid #cbd5e0; 
-    display: flex; 
-    flex-direction: column; 
-    gap: 0.5rem; 
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Тень для объема на синем фоне */
-  }
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #2D3748 !important; letter-spacing: 0.05em; }
+  .stat-value { font-size: 1.6rem; font-weight: 900; color: #000000 !important; line-height: 1.2; }
   
-  /* Подписи - темно-графитовый цвет */
-  .stat-label { 
-    font-size: 0.75rem; 
-    font-weight: 800; 
-    text-transform: uppercase; 
-    color: #2D3748 !important; 
-    letter-spacing: 0.05em; 
-  }
-  
-  /* Значения - ГЛУБОКИЙ ЧЕРНЫЙ ЦВЕТ */
-  .stat-value { 
-    font-size: 1.6rem; 
-    font-weight: 900; 
-    color: #000000 !important; 
-    line-height: 1.2;
-  }
-  
-  /* Цветовые акценты слева */
   .stat-card.info { border-left: 6px solid #3182ce !important; }
   .stat-card.success { border-left: 6px solid #38a169 !important; }
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
   .stat-card.danger .stat-value { color: #c53030 !important; }
   .stat-card.warning { border-left: 6px solid #d69e2e !important; }
 
-  /* Остальные карточки (фильтры, графики) */
   .card { background-color: #ffffff !important; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1.5rem; margin-bottom: 1.5rem; }
-  .filter-bar .filter-row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
-  .filter-group label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #4a5568 !important; }
-  .input-field { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; background: #fff !important; color: #1a202c !important; }
   .btn { padding: 8px 14px; background: #fff !important; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; color: #1a202c !important; }
-  .btn-primary { background: #3b82f6 !important; color: #fff !important; border: none; font-weight: bold; }
+  .btn-primary { background: #3b82f6 !important; color: #fff !important; font-weight: bold; }
   .btn-outline { color: #e53e3e !important; border: 1px solid #e53e3e !important; font-weight: bold; }
-
-  .chart-container { height: 350px; background: #fff !important; }
+  .chart-container { height: 350px; background: #fff !important; padding: 1rem; }
+  
   table { width: 100%; border-collapse: collapse; background: #fff !important; }
   th { background: #f7fafc !important; color: #4a5568 !important; padding: 12px; border: 1px solid #cbd5e0; font-size: 0.8rem; text-transform: uppercase; cursor: pointer; }
   td { padding: 12px; border: 1px solid #e2e8f0; color: #1a202c !important; }
   .row-danger { background-color: #fff5f5 !important; color: #c53030 !important; font-weight: 600; }
-  
   .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; min-width: 70px; text-align: center; }
   .green { background: #c6f6d5 !important; color: #22543d !important; }
   .yellow { background: #feebc8 !important; color: #744210 !important; }
   .red { background: #fed7d7 !important; color: #822727 !important; }
-  
   .jmr-text { display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #2b6cb0; font-weight: 600; cursor: help; margin: 0 auto; }
 </style>
