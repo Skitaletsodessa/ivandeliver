@@ -273,18 +273,19 @@ import Layout from '../layouts/Layout.astro';
   .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c; font-family: system-ui, -apple-system, sans-serif; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
   
-  /* Summary Grid Styles - Контраст обновлен */
+  /* Summary Grid Styles - Контраст повышен */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background: white; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; transition: transform 0.2s; }
+  .stat-card { background: #fff; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; transition: transform 0.2s, box-shadow 0.2s; }
+  
   .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
   
-  /* Подписи (Labels) - стали темнее и четче */
-  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568; letter-spacing: 0.025em; }
+  /* Подписи (Labels) - стали насыщеннее и четче */
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #2d3748; letter-spacing: 0.05em; }
   
-  /* Значения (Values) - теперь глубокий темный цвет */
-  .stat-value { font-size: 1.6rem; font-weight: 900; color: #1a202c; }
+  /* Значения (Values) - теперь чисто черные и весомые */
+  .stat-value { font-size: 1.6rem; font-weight: 900; color: #000; }
   
-  /* Цветовые акценты (Border Accents) */
+  /* Цветовые акценты */
   .stat-card.info { border-left: 5px solid #3182ce; }
   .stat-card.success { border-left: 5px solid #38a169; }
   .stat-card.danger { border-left: 5px solid #e53e3e; }
