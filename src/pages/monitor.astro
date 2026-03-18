@@ -14,8 +14,7 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
-    <div id="summary-stats" class="summary-grid">
-      </div>
+    <div id="summary-stats" class="summary-grid"></div>
 
     <div class="card filter-bar">
       <div class="filter-row">
@@ -83,16 +82,16 @@ import Layout from '../layouts/Layout.astro';
   </main>
 </Layout>
 
-<script>
+<script lang="ts">
   import Chart from 'chart.js/auto';
 
   const API_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
-  let rawData = [];
-  let filteredData = [];
+  let rawData: any[] = [];
+  let filteredData: any[] = [];
   let currentPage = 1;
   const pageSize = 100;
   let currentSort = { key: 'date', dir: 'desc' };
-  let myChart = null;
+  let myChart: any = null;
 
   async function init() {
     try {
@@ -135,7 +134,7 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  function renderChart(data) {
+  function renderChart(data: any[]) {
     const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
     if (!ctx || !data.length) return;
     const labels = [...new Set(data.map(item => item.date))].sort();
@@ -188,14 +187,17 @@ import Layout from '../layouts/Layout.astro';
     renderChart(filteredData);
   }
 
-  function sortData(key, dir) {
+  function sortData(key: string, dir: string) {
     const modifier = dir === 'desc' ? 1 : -1;
     filteredData.sort((a, b) => {
-      const hasJmr = (v) => (v && v !== '0' && v !== '') ? 1 : 0;
+      const hasJmr = (v: any) => (v && v !== '0' && v !== '') ? 1 : 0;
       if (key === 'date') return b.date.localeCompare(a.date) * modifier;
       if (key === 'jmr_p1_sender') return (hasJmr(b.jmr_p1_sender) - hasJmr(a.jmr_p1_sender)) * modifier;
-      if (typeof a[key] === 'string') return String(a[key]).localeCompare(String(b[key])) * modifier;
-      return (b[key] - a[key]) * modifier;
+      
+      const valA = a[key];
+      const valB = b[key];
+      if (typeof valA === 'string') return valA.localeCompare(valB) * modifier;
+      return (valB - valA) * modifier;
     });
   }
 
@@ -219,19 +221,24 @@ import Layout from '../layouts/Layout.astro';
     if (pInfo) pInfo.innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
   }
 
-  function setRange(days) {
+  function setRange(days: number) {
     const to = new Date().toISOString().split('T')[0];
     const from = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
-    (document.getElementById('dateFrom') as HTMLInputElement).value = from;
-    (document.getElementById('dateTo') as HTMLInputElement).value = to;
+    const dFrom = document.getElementById('dateFrom') as HTMLInputElement;
+    const dTo = document.getElementById('dateTo') as HTMLInputElement;
+    if (dFrom) dFrom.value = from;
+    if (dTo) dTo.value = to;
     applyFilters();
   }
 
   function setupEventListeners() {
-    document.querySelectorAll('.quick-filter').forEach(btn => { (btn as HTMLElement).onclick = () => setRange(parseInt((btn as HTMLElement).dataset.days || '7')); });
+    document.querySelectorAll('.quick-filter').forEach(btn => { 
+      (btn as HTMLElement).onclick = () => setRange(parseInt((btn as HTMLElement).dataset.days || '7')); 
+    });
     document.getElementById('dateFrom')?.addEventListener('change', applyFilters);
     document.getElementById('dateTo')?.addEventListener('change', applyFilters);
     document.getElementById('tableSearch')?.addEventListener('input', applyFilters);
+    
     document.getElementById('downloadCsv')?.addEventListener('click', () => {
       const h = ['Date', 'IP', 'Status', 'Compl%', 'Traps', 'JMR'];
       const csv = [h.join(','), ...filteredData.map(r => [r.date, r.ip, r.filter_result, r.complaints, r.traps, r.jmr_p1_sender].join(','))].join('\n');
@@ -239,19 +246,34 @@ import Layout from '../layouts/Layout.astro';
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'snds.csv'; a.click();
     });
+
     document.getElementById('resetDates')?.addEventListener('click', () => { 
-      (document.getElementById('dateFrom') as HTMLInputElement).value = ''; 
-      (document.getElementById('dateTo') as HTMLInputElement).value = ''; 
+      const dFrom = document.getElementById('dateFrom') as HTMLInputElement;
+      const dTo = document.getElementById('dateTo') as HTMLInputElement;
+      if (dFrom) dFrom.value = ''; 
+      if (dTo) dTo.value = ''; 
       applyFilters(); 
     });
-    document.querySelectorAll('th.sortable').forEach(th => { (th as HTMLElement).onclick = () => {
-      const k = (th as HTMLElement).dataset.sort; currentSort.dir = (currentSort.key === k && currentSort.dir === 'desc') ? 'asc' : 'desc'; currentSort.key = k;
-      sortData(k, currentSort.dir); renderTable();
-    }});
-    document.getElementById('prevPage')?.onclick = () => { if (currentPage > 1) { currentPage--; renderTable(); } };
-    document.getElementById('nextPage')?.onclick = () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } };
-    document.getElementById('logoutBtn')!.onclick = () => { if(confirm("Logout?")) window.location.href = window.location.origin + "/cdn-cgi/access/logout"; };
+
+    document.querySelectorAll('th.sortable').forEach(th => { 
+      (th as HTMLElement).onclick = () => {
+        const k = (th as HTMLElement).dataset.sort || 'date'; 
+        currentSort.dir = (currentSort.key === k && currentSort.dir === 'desc') ? 'asc' : 'desc'; 
+        currentSort.key = k;
+        sortData(k, currentSort.dir); 
+        renderTable();
+      }
+    });
+
+    const prev = document.getElementById('prevPage');
+    const next = document.getElementById('nextPage');
+    if (prev) prev.onclick = () => { if (currentPage > 1) { currentPage--; renderTable(); } };
+    if (next) next.onclick = () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } };
+    
+    const logout = document.getElementById('logoutBtn');
+    if (logout) logout.onclick = () => { if(confirm("Logout?")) window.location.href = window.location.origin + "/cdn-cgi/access/logout"; };
   }
+
   init();
 </script>
 
@@ -259,7 +281,6 @@ import Layout from '../layouts/Layout.astro';
   .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c; font-family: system-ui, sans-serif; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
   
-  /* Summary Grid - High Contrast */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   .stat-card { background-color: #ffffff !important; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
   .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #2D3748 !important; letter-spacing: 0.05em; }
@@ -270,18 +291,14 @@ import Layout from '../layouts/Layout.astro';
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
   .stat-card.warning { border-left: 6px solid #d69e2e !important; }
 
-  /* FILTER BAR - FIXED LAYOUT */
   .filter-bar.card { background-color: #ffffff !important; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1.5rem; margin-bottom: 1.5rem; }
   .filter-row { display: flex; flex-wrap: wrap; gap: 2.5rem; align-items: flex-end; }
-  
   .filter-group { display: flex; flex-direction: column; gap: 0.6rem; }
   .filter-group label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; letter-spacing: 0.02em; }
-  
   .btn-group { display: flex; gap: 0.5rem; align-items: center; }
   .input-row { display: flex; align-items: center; gap: 0.7rem; }
   .to-sep { font-weight: bold; color: #1a202c !important; }
 
-  /* Inputs & Buttons Visuals */
   .input-field { padding: 9px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; background: #fff !important; color: #000 !important; font-weight: 500; }
   .btn { padding: 9px 16px; background: #fff !important; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; color: #000 !important; font-weight: 600; font-size: 14px; transition: all 0.2s; }
   .btn:hover { background: #f7fafc !important; border-color: #a0aec0; }
