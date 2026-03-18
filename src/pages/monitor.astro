@@ -86,13 +86,17 @@ import Layout from '../layouts/Layout.astro';
   let filteredData = [];
   let currentPage = 1;
   const pageSize = 100;
-  let currentSort = { key: 'traps', dir: 'desc' };
+  
+  // Устанавливаем сортировку по умолчанию: Дата (desc)
+  let currentSort = { key: 'date', dir: 'desc' };
   let myChart = null;
 
   async function init() {
     try {
       const response = await fetch(API_URL);
       rawData = await response.json();
+      
+      // По умолчанию 7 дней
       setRange(7);
       setupEventListeners();
     } catch (err) {
@@ -138,30 +142,54 @@ import Layout from '../layouts/Layout.astro';
       return dateMatch && searchMatch;
     });
 
+    // Сортируем перед рендером
     sortData(currentSort.key, currentSort.dir);
     currentPage = 1;
     renderTable();
     renderChart(filteredData);
   }
 
+  /**
+   * Многоуровневая сортировка:
+   * 1. Приоритет выбранного столбца (key)
+   * 2. Цепочка fallback: Date -> JMR -> Traps -> Complaints
+   */
   function sortData(key, dir) {
     const modifier = dir === 'desc' ? 1 : -1;
+
     filteredData.sort((a, b) => {
-      // Специальная логика для текстового поля JMR
-      if (key === 'jmr_p1_sender') {
-        const valA = String(a[key] || '');
-        const valB = String(b[key] || '');
-        return valA.localeCompare(valB) * modifier;
+      const hasJmr = (val) => (val && val !== '0' && val !== '') ? 1 : 0;
+
+      // Сначала обрабатываем кликнутый столбец
+      if (key === 'date') {
+        if (a.date !== b.date) return b.date.localeCompare(a.date) * modifier;
+      } else if (key === 'jmr_p1_sender') {
+        const jmrA = hasJmr(a.jmr_p1_sender);
+        const jmrB = hasJmr(b.jmr_p1_sender);
+        if (jmrA !== jmrB) return (jmrB - jmrA) * modifier;
+      } else if (key === 'ip' || key === 'filter_result') {
+        if (a[key] !== b[key]) return String(a[key]).localeCompare(String(b[key])) * modifier;
+      } else {
+        // Числовые поля: Traps, Complaints
+        if (a[key] !== b[key]) return (b[key] - a[key]) * modifier;
       }
-      // Числовая сортировка
-      if (key === 'traps' || key === 'complaints') {
-        if (b[key] === a[key]) {
-             const secondary = key === 'traps' ? 'complaints' : 'traps';
-             return (b[secondary] - a[secondary]) * modifier;
-        }
-        return (b[key] - a[key]) * modifier;
-      }
-      return a[key] < b[key] ? 1 * modifier : -1 * modifier;
+
+      // --- ЦЕПОЧКА ПРИОРИТЕТОВ (FALLBACK) ---
+      // Если основные значения равны, идем по иерархии: Дата -> JMR -> Traps -> Complaints
+
+      // 1. Дата
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+
+      // 2. JMR P1 Presence
+      const jA = hasJmr(a.jmr_p1_sender);
+      const jB = hasJmr(b.jmr_p1_sender);
+      if (jA !== jB) return jB - jA;
+
+      // 3. Traps
+      if (a.traps !== b.traps) return b.traps - a.traps;
+
+      // 4. Complaints
+      return b.complaints - a.complaints;
     });
   }
 
@@ -211,7 +239,6 @@ import Layout from '../layouts/Layout.astro';
     const labels = [...new Set(data.map(item => item.date))].sort();
     const complaints = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.complaints, 0));
     
-    // Считаем количество JMR событий (хитов) для графика
     const jmrHits = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => {
       const isHit = (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '') ? 1 : 0;
       return s + isHit;
@@ -266,53 +293,23 @@ import Layout from '../layouts/Layout.astro';
 
 <style is:global>
   .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c !important; font-family: sans-serif; }
-  
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; position: relative; }
-  
   .card { background: white !important; border-radius: 12px; border: 1px solid #cbd5e0 !important; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  
   .filter-bar .filter-row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
   .filter-group { display: flex; flex-direction: column; gap: 0.5rem; }
   .filter-group label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #4a5568 !important; }
-  
   .btn-group { display: flex; gap: 6px; }
   .input-row { display: flex; align-items: center; gap: 0.5rem; color: #1a202c !important; }
   .to-sep { color: #1a202c !important; font-weight: bold; }
-
   .chart-container { height: 350px; }
   .table-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-  
-  .input-field { 
-    padding: 8px 12px !important; 
-    border: 1px solid #cbd5e0 !important; 
-    border-radius: 6px !important; 
-    font-size: 14px !important; 
-    background-color: white !important; 
-    color: #1a202c !important; 
-  }
-  
-  .btn { 
-    padding: 8px 14px !important; 
-    background-color: white !important; 
-    color: #1a202c !important; 
-    border: 1px solid #cbd5e0 !important; 
-    border-radius: 6px !important; 
-    cursor: pointer !important; 
-    font-size: 14px !important; 
-    transition: all 0.2s;
-  }
+  .input-field { padding: 8px 12px !important; border: 1px solid #cbd5e0 !important; border-radius: 6px !important; font-size: 14px !important; background-color: white !important; color: #1a202c !important; }
+  .btn { padding: 8px 14px !important; background-color: white !important; color: #1a202c !important; border: 1px solid #cbd5e0 !important; border-radius: 6px !important; cursor: pointer !important; font-size: 14px !important; transition: all 0.2s; }
   .btn:hover { background-color: #f7fafc !important; }
   .btn-primary { background-color: #3b82f6 !important; color: white !important; border: none !important; font-weight: bold !important; }
-
-  .btn-outline {
-    background: transparent !important;
-    color: #ef4444 !important;
-    border: 1px solid #ef4444 !important;
-    font-weight: bold;
-  }
+  .btn-outline { background: transparent !important; color: #ef4444 !important; border: 1px solid #ef4444 !important; font-weight: bold; }
   .btn-outline:hover { background: #fee2e2 !important; }
 
-  /* JMR Email Text Styling */
   .jmr-text {
     display: block;
     max-width: 180px;
@@ -343,10 +340,8 @@ import Layout from '../layouts/Layout.astro';
   table { width: 100%; border-collapse: collapse; background: white !important; color: #1a202c !important; }
   th { background: #f7fafc !important; padding: 12px; border: 1px solid #cbd5e0 !important; font-size: 0.8rem; text-transform: uppercase; color: #4a5568 !important; cursor: pointer; }
   td { padding: 12px; border: 1px solid #e2e8f0 !important; color: #1a202c !important; }
-
   .row-danger { background-color: #fff5f5 !important; }
   .row-danger td { color: #c53030 !important; font-weight: 600; }
-  
   .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; min-width: 70px; text-align: center; border: 1px solid rgba(0,0,0,0.1); }
   .green { background: #c6f6d5 !important; color: #22543d !important; }
   .yellow { background: #feebc8 !important; color: #744210 !important; }
