@@ -7,12 +7,15 @@ import Layout from '../layouts/Layout.astro';
     <div class="header">
       <div class="title-area">
         <h1>SNDS Deliverability Hub</h1>
-        <p>IP reputation, Complaints, and JMR (Junk Mail Reporting) monitoring.</p>
+        <p>IP reputation, Complaints, and JMR monitoring.</p>
       </div>
       <div class="monitor-header-actions">
         <button id="logoutBtn" class="btn btn-outline">Logout</button>
       </div>
     </div>
+
+    <div id="summary-stats" class="summary-grid">
+      </div>
 
     <div class="card filter-bar">
       <div class="filter-row">
@@ -21,9 +24,7 @@ import Layout from '../layouts/Layout.astro';
           <div class="btn-group">
             <button class="btn quick-filter" data-days="7">7D</button>
             <button class="btn quick-filter" data-days="14">14D</button>
-            <button class="btn quick-filter" data-days="21">21D</button>
             <button class="btn quick-filter" data-days="30">30D</button>
-            <button class="btn quick-filter" data-days="60">60D</button>
           </div>
         </div>
         
@@ -50,7 +51,7 @@ import Layout from '../layouts/Layout.astro';
     <div class="card table-container">
       <div class="table-controls">
         <div class="search-box">
-          <input type="text" id="tableSearch" placeholder="Search IP or Status..." class="input-field" />
+          <input type="text" id="tableSearch" placeholder="Search IP..." class="input-field" />
         </div>
         <div class="pagination-controls">
           <button id="prevPage" class="btn">←</button>
@@ -86,8 +87,6 @@ import Layout from '../layouts/Layout.astro';
   let filteredData = [];
   let currentPage = 1;
   const pageSize = 100;
-  
-  // Устанавливаем сортировку по умолчанию: Дата (desc)
   let currentSort = { key: 'date', dir: 'desc' };
   let myChart = null;
 
@@ -96,36 +95,55 @@ import Layout from '../layouts/Layout.astro';
       const response = await fetch(API_URL);
       rawData = await response.json();
       
-      // По умолчанию 7 дней
       setRange(7);
+      renderSummary(); // Инициализируем сводку
       setupEventListeners();
     } catch (err) {
       console.error("Data load error:", err);
     }
   }
 
-  // Logout Logic
-  const logoutBtn = document.getElementById('logoutBtn');
-  if (logoutBtn) {
-    logoutBtn.onclick = () => {
-      const logoutUrl = window.location.origin + "/cdn-cgi/access/logout";
-      if (confirm("Logout from SNDS Monitor?")) {
-        window.location.href = logoutUrl;
-      }
-    };
+  // LOGIC: Summary Calculation
+  function renderSummary() {
+    const container = document.getElementById('summary-stats');
+    if (!container || rawData.length === 0) return;
+
+    // Находим последнюю дату, за которую есть данные
+    const latestDate = [...new Set(rawData.map(r => r.date))].sort().pop();
+    const todayData = rawData.filter(r => r.date === latestDate);
+
+    const redCount = todayData.filter(r => r.filter_result === 'RED').length;
+    const trapSum = todayData.reduce((s, r) => s + (r.traps || 0), 0);
+    const jmrCount = todayData.filter(r => r.jmr_p1_sender && r.jmr_p1_sender !== '0' && r.jmr_p1_sender !== '').length;
+
+    container.innerHTML = `
+      <div class="stat-card">
+        <span class="stat-label">Latest Data Date</span>
+        <span class="stat-value" style="color: #4a5568">${latestDate}</span>
+      </div>
+      <div class="stat-card ${redCount > 0 ? 'danger' : 'success'}">
+        <span class="stat-label">RED IPs Today</span>
+        <span class="stat-value">${redCount}</span>
+      </div>
+      <div class="stat-card ${trapSum > 0 ? 'warning' : ''}">
+        <span class="stat-label">Total Trap Hits</span>
+        <span class="stat-value">${trapSum}</span>
+      </div>
+      <div class="stat-card ${jmrCount > 0 ? 'warning' : ''}">
+        <span class="stat-label">JMR P1 Incidents</span>
+        <span class="stat-value">${jmrCount}</span>
+      </div>
+    `;
   }
 
+  // --- Навигация и Сортировка (без изменений логики) ---
   function setRange(days) {
     const to = new Date().toISOString().split('T')[0];
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - days);
     const from = fromDate.toISOString().split('T')[0];
-    
-    const inputFrom = document.getElementById('dateFrom') as HTMLInputElement;
-    const inputTo = document.getElementById('dateTo') as HTMLInputElement;
-    if (inputFrom) inputFrom.value = from;
-    if (inputTo) inputTo.value = to;
-    
+    (document.getElementById('dateFrom') as HTMLInputElement).value = from;
+    (document.getElementById('dateTo') as HTMLInputElement).value = to;
     applyFilters();
   }
 
@@ -138,57 +156,37 @@ import Layout from '../layouts/Layout.astro';
       const dateMatch = (!from || r.date >= from) && (!to || r.date <= to);
       const searchMatch = r.ip.toLowerCase().includes(search) || 
                           r.filter_result.toLowerCase().includes(search) ||
-                          (r.jmr_p1_sender && r.jmr_p1_sender.toLowerCase().includes(search));
+                          (r.jmr_p1_sender && String(r.jmr_p1_sender).toLowerCase().includes(search));
       return dateMatch && searchMatch;
     });
 
-    // Сортируем перед рендером
     sortData(currentSort.key, currentSort.dir);
     currentPage = 1;
     renderTable();
     renderChart(filteredData);
   }
 
-  /**
-   * Многоуровневая сортировка:
-   * 1. Приоритет выбранного столбца (key)
-   * 2. Цепочка fallback: Date -> JMR -> Traps -> Complaints
-   */
   function sortData(key, dir) {
     const modifier = dir === 'desc' ? 1 : -1;
-
     filteredData.sort((a, b) => {
       const hasJmr = (val) => (val && val !== '0' && val !== '') ? 1 : 0;
-
-      // Сначала обрабатываем кликнутый столбец
       if (key === 'date') {
         if (a.date !== b.date) return b.date.localeCompare(a.date) * modifier;
       } else if (key === 'jmr_p1_sender') {
-        const jmrA = hasJmr(a.jmr_p1_sender);
-        const jmrB = hasJmr(b.jmr_p1_sender);
-        if (jmrA !== jmrB) return (jmrB - jmrA) * modifier;
+        const jA = hasJmr(a.jmr_p1_sender);
+        const jB = hasJmr(b.jmr_p1_sender);
+        if (jA !== jB) return (jB - jA) * modifier;
       } else if (key === 'ip' || key === 'filter_result') {
         if (a[key] !== b[key]) return String(a[key]).localeCompare(String(b[key])) * modifier;
       } else {
-        // Числовые поля: Traps, Complaints
         if (a[key] !== b[key]) return (b[key] - a[key]) * modifier;
       }
-
-      // --- ЦЕПОЧКА ПРИОРИТЕТОВ (FALLBACK) ---
-      // Если основные значения равны, идем по иерархии: Дата -> JMR -> Traps -> Complaints
-
-      // 1. Дата
+      // Chain Fallback
       if (a.date !== b.date) return b.date.localeCompare(a.date);
-
-      // 2. JMR P1 Presence
       const jA = hasJmr(a.jmr_p1_sender);
       const jB = hasJmr(b.jmr_p1_sender);
       if (jA !== jB) return jB - jA;
-
-      // 3. Traps
       if (a.traps !== b.traps) return b.traps - a.traps;
-
-      // 4. Complaints
       return b.complaints - a.complaints;
     });
   }
@@ -209,49 +207,31 @@ import Layout from '../layouts/Layout.astro';
           <td style="text-align: center;">${row.complaints}%</td>
           <td style="text-align: center;">${row.traps}</td>
           <td style="text-align: center; font-size: 0.85rem; position: relative;">
-            ${hasJmr 
-              ? `<span class="jmr-text" title="${row.jmr_p1_sender}">${row.jmr_p1_sender}</span>` 
-              : '0'}
+            ${hasJmr ? `<span class="jmr-text" title="${row.jmr_p1_sender}">${row.jmr_p1_sender}</span>` : '0'}
           </td>
         </tr>
       `;
     }).join('');
-
     const pageInfo = document.getElementById('pageInfo');
     if (pageInfo) pageInfo.innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
   }
 
-  function downloadCsv() {
-    const headers = ['Date', 'IP', 'Status', 'Complaints%', 'Traps', 'JMR_P1_Data'];
-    const rows = filteredData.map(r => [r.date, r.ip, r.filter_result, r.complaints, r.traps, r.jmr_p1_sender].join(','));
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
-    const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csvContent));
-    link.setAttribute("download", `snds_report_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
   function renderChart(data) {
     const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
-    if (!ctx) return;
+    if (!ctx || !data.length) return;
     const labels = [...new Set(data.map(item => item.date))].sort();
     const complaints = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.complaints, 0));
-    
     const jmrHits = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => {
-      const isHit = (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '') ? 1 : 0;
-      return s + isHit;
+      return s + (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '' ? 1 : 0);
     }, 0));
-
     if (myChart) myChart.destroy();
     myChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels: labels,
         datasets: [
-          { label: 'Sum of Complaints %', data: complaints, borderColor: '#3b82f6', tension: 0.2, fill: false },
-          { label: 'JMR Events', data: jmrHits, borderColor: '#ef4444', tension: 0.2, backgroundColor: 'rgba(239, 68, 68, 0.05)', fill: true }
+          { label: 'Sum of Complaints %', data: complaints, borderColor: '#3b82f6', tension: 0.2 },
+          { label: 'JMR Events', data: jmrHits, borderColor: '#ef4444', tension: 0.2, fill: true, backgroundColor: 'rgba(239, 68, 68, 0.05)' }
         ]
       },
       options: { responsive: true, maintainAspectRatio: false }
@@ -262,18 +242,21 @@ import Layout from '../layouts/Layout.astro';
     document.querySelectorAll('.quick-filter').forEach(btn => {
       (btn as HTMLElement).onclick = () => setRange(parseInt((btn as HTMLElement).dataset.days || '7'));
     });
-    
     document.getElementById('dateFrom')?.addEventListener('change', applyFilters);
     document.getElementById('dateTo')?.addEventListener('change', applyFilters);
     document.getElementById('tableSearch')?.addEventListener('input', applyFilters);
-    document.getElementById('downloadCsv')?.addEventListener('click', downloadCsv);
-    
+    document.getElementById('downloadCsv')?.addEventListener('click', () => {
+      const headers = ['Date', 'IP', 'Status', 'Complaints%', 'Traps', 'JMR_Data'];
+      const csv = [headers.join(','), ...filteredData.map(r => [r.date, r.ip, r.filter_result, r.complaints, r.traps, r.jmr_p1_sender].join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'snds_report.csv'; a.click();
+    });
     document.getElementById('resetDates')?.addEventListener('click', () => {
       (document.getElementById('dateFrom') as HTMLInputElement).value = '';
       (document.getElementById('dateTo') as HTMLInputElement).value = '';
       applyFilters();
     });
-
     document.querySelectorAll('th.sortable').forEach(th => {
       (th as HTMLElement).onclick = () => {
         const key = (th as HTMLElement).dataset.sort || 'date';
@@ -283,68 +266,51 @@ import Layout from '../layouts/Layout.astro';
         renderTable();
       };
     });
-
     document.getElementById('prevPage')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderTable(); } });
     document.getElementById('nextPage')?.addEventListener('click', () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } });
+    document.getElementById('logoutBtn')!.onclick = () => { if(confirm("Logout?")) window.location.href = window.location.origin + "/cdn-cgi/access/logout"; };
   }
 
   init();
 </script>
 
 <style is:global>
-  .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c !important; font-family: sans-serif; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; position: relative; }
-  .card { background: white !important; border-radius: 12px; border: 1px solid #cbd5e0 !important; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c; font-family: system-ui, sans-serif; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
+  
+  /* Summary Grid Styles */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: white; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; }
+  .stat-label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #718096; }
+  .stat-value { font-size: 1.5rem; font-weight: 800; color: #2d3748; }
+  
+  .stat-card.success { border-left: 5px solid #48bb78; }
+  .stat-card.danger { border-left: 5px solid #f56565; }
+  .stat-card.danger .stat-value { color: #c53030; }
+  .stat-card.warning { border-left: 5px solid #ed8936; }
+
+  .card { background: white; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1.5rem; margin-bottom: 1.5rem; }
   .filter-bar .filter-row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
   .filter-group { display: flex; flex-direction: column; gap: 0.5rem; }
-  .filter-group label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #4a5568 !important; }
+  .filter-group label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #4a5568; }
   .btn-group { display: flex; gap: 6px; }
-  .input-row { display: flex; align-items: center; gap: 0.5rem; color: #1a202c !important; }
-  .to-sep { color: #1a202c !important; font-weight: bold; }
+  .input-field { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; }
+  .btn { padding: 8px 14px; background: white; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+  .btn-primary { background: #3b82f6; color: white; border: none; font-weight: bold; }
+  .btn-outline { color: #ef4444; border: 1px solid #ef4444; font-weight: bold; }
+  .btn-outline:hover { background: #fee2e2; }
+
   .chart-container { height: 350px; }
-  .table-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-  .input-field { padding: 8px 12px !important; border: 1px solid #cbd5e0 !important; border-radius: 6px !important; font-size: 14px !important; background-color: white !important; color: #1a202c !important; }
-  .btn { padding: 8px 14px !important; background-color: white !important; color: #1a202c !important; border: 1px solid #cbd5e0 !important; border-radius: 6px !important; cursor: pointer !important; font-size: 14px !important; transition: all 0.2s; }
-  .btn:hover { background-color: #f7fafc !important; }
-  .btn-primary { background-color: #3b82f6 !important; color: white !important; border: none !important; font-weight: bold !important; }
-  .btn-outline { background: transparent !important; color: #ef4444 !important; border: 1px solid #ef4444 !important; font-weight: bold; }
-  .btn-outline:hover { background: #fee2e2 !important; }
-
-  .jmr-text {
-    display: block;
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: #2b6cb0;
-    font-weight: 600;
-    cursor: help;
-    margin: 0 auto;
-  }
-  .jmr-text:hover { 
-    overflow: visible; 
-    white-space: normal; 
-    background: #fff; 
-    position: absolute; 
-    z-index: 50; 
-    border: 1px solid #cbd5e0; 
-    padding: 6px; 
-    border-radius: 6px; 
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    left: 50%;
-    transform: translateX(-50%);
-    width: max-content;
-    max-width: 300px;
-  }
-
-  table { width: 100%; border-collapse: collapse; background: white !important; color: #1a202c !important; }
-  th { background: #f7fafc !important; padding: 12px; border: 1px solid #cbd5e0 !important; font-size: 0.8rem; text-transform: uppercase; color: #4a5568 !important; cursor: pointer; }
-  td { padding: 12px; border: 1px solid #e2e8f0 !important; color: #1a202c !important; }
-  .row-danger { background-color: #fff5f5 !important; }
-  .row-danger td { color: #c53030 !important; font-weight: 600; }
-  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; min-width: 70px; text-align: center; border: 1px solid rgba(0,0,0,0.1); }
-  .green { background: #c6f6d5 !important; color: #22543d !important; }
-  .yellow { background: #feebc8 !important; color: #744210 !important; }
-  .red { background: #fed7d7 !important; color: #822727 !important; }
-  code { background: #ebf8ff; color: #2b6cb0; padding: 2px 5px; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f7fafc; padding: 12px; border: 1px solid #cbd5e0; font-size: 0.8rem; text-transform: uppercase; cursor: pointer; }
+  td { padding: 12px; border: 1px solid #e2e8f0; }
+  .row-danger { background-color: #fff5f5; color: #c53030; font-weight: 600; }
+  
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; min-width: 70px; text-align: center; }
+  .green { background: #c6f6d5; color: #22543d; }
+  .yellow { background: #feebc8; color: #744210; }
+  .red { background: #fed7d7; color: #822727; }
+  
+  .jmr-text { display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #2b6cb0; font-weight: 600; cursor: help; margin: 0 auto; }
+  .jmr-text:hover { overflow: visible; white-space: normal; background: #fff; position: absolute; z-index: 50; border: 1px solid #cbd5e0; padding: 6px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); left: 50%; transform: translateX(-50%); width: max-content; max-width: 300px; }
 </style>
