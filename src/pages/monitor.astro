@@ -15,7 +15,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div id="summary-stats" class="summary-grid">
-      </div>
+    </div>
 
     <div class="card filter-bar">
       <div class="filter-row">
@@ -211,25 +211,74 @@ import Layout from '../layouts/Layout.astro';
     if (pageInfo) pageInfo.innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
   }
 
+  // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ГРАФИКА ---
   function renderChart(data) {
     const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
     if (!ctx || !data.length) return;
     const labels = [...new Set(data.map(item => item.date))].sort();
-    const complaints = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => s + c.complaints, 0));
+    
+    // 1. СРЕДНИЙ ПРОЦЕНТ ЖАЛОБ
+    const avgComplaints = labels.map(d => {
+      const dayData = data.filter(i => i.date === d);
+      return (dayData.reduce((s, c) => s + c.complaints, 0) / dayData.length).toFixed(3);
+    });
+
+    // 2. СУММА IP АДРЕСОВ
+    const ipCounts = labels.map(d => data.filter(i => i.date === d).length);
+
+    // 3. JMR ИНЦИДЕНТЫ
     const jmrHits = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => {
       return s + (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '' ? 1 : 0);
     }, 0));
+
     if (myChart) myChart.destroy();
     myChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels: labels,
         datasets: [
-          { label: 'Sum of Complaints %', data: complaints, borderColor: '#3b82f6', tension: 0.2 },
-          { label: 'JMR Events', data: jmrHits, borderColor: '#ef4444', tension: 0.2, fill: true, backgroundColor: 'rgba(239, 68, 68, 0.05)' }
+          { 
+            label: 'Avg Complaints %', 
+            data: avgComplaints, 
+            borderColor: '#3b82f6', 
+            tension: 0.2, 
+            yAxisID: 'yPerc' 
+          },
+          { 
+            label: 'Total IP Count', 
+            data: ipCounts, 
+            borderColor: '#10b981', 
+            backgroundColor: 'rgba(16, 185, 129, 0.05)', 
+            fill: true, 
+            tension: 0.2, 
+            yAxisID: 'yCount' 
+          },
+          { 
+            label: 'JMR Events', 
+            data: jmrHits, 
+            borderColor: '#ef4444', 
+            tension: 0.2, 
+            yAxisID: 'yCount' 
+          }
         ]
       },
-      options: { responsive: true, maintainAspectRatio: false }
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false,
+        scales: {
+          yPerc: {
+            type: 'linear',
+            position: 'left',
+            title: { display: true, text: 'Avg Complaints %' }
+          },
+          yCount: {
+            type: 'linear',
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            title: { display: true, text: 'Count (IP / JMR)' }
+          }
+        }
+      }
     });
   }
 
@@ -273,7 +322,6 @@ import Layout from '../layouts/Layout.astro';
   .monitor-wrapper { padding: 2rem; max-width: 1200px; margin: 0 auto; color: #1a202c; font-family: system-ui, -apple-system, sans-serif; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
   
-  /* Summary Grid - ПУЛЕНЕПРОБИВАЕМЫЙ КОНТРАСТ */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   
   .stat-card { 
@@ -284,10 +332,9 @@ import Layout from '../layouts/Layout.astro';
     display: flex; 
     flex-direction: column; 
     gap: 0.5rem; 
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Тень для объема на синем фоне */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
   }
   
-  /* Подписи - темно-графитовый цвет */
   .stat-label { 
     font-size: 0.75rem; 
     font-weight: 800; 
@@ -296,7 +343,6 @@ import Layout from '../layouts/Layout.astro';
     letter-spacing: 0.05em; 
   }
   
-  /* Значения - ГЛУБОКИЙ ЧЕРНЫЙ ЦВЕТ */
   .stat-value { 
     font-size: 1.6rem; 
     font-weight: 900; 
@@ -304,14 +350,12 @@ import Layout from '../layouts/Layout.astro';
     line-height: 1.2;
   }
   
-  /* Цветовые акценты слева */
   .stat-card.info { border-left: 6px solid #3182ce !important; }
   .stat-card.success { border-left: 6px solid #38a169 !important; }
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
   .stat-card.danger .stat-value { color: #c53030 !important; }
   .stat-card.warning { border-left: 6px solid #d69e2e !important; }
 
-  /* Остальные карточки (фильтры, графики) */
   .card { background-color: #ffffff !important; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1.5rem; margin-bottom: 1.5rem; }
   .filter-bar .filter-row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
   .filter-group label { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: #4a5568 !important; }
