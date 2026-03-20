@@ -54,7 +54,7 @@ import Layout from '../layouts/Layout.astro';
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
   const CHECK_URL = 'https://checkdns.skitalets-od.workers.dev/api/check-domain?domain=';
   let rawData = [];
-  let currentFilteredData = []; // Переменная для хранения текущих отфильтрованных данных для CSV
+  let currentFilteredData = []; 
   let currentFilter = 'all'; 
   let currentProduct = 'TinyEmail';
   let expandedDomain = null;
@@ -108,6 +108,11 @@ import Layout from '../layouts/Layout.astro';
     return data.map(d => {
       d.product = d.product || 'TinyEmail';
       d.account_type = d.account_type || 'Non-Major';
+      
+      // Конвертируем старые значения bounce для совместимости
+      d.bounce_status = (d.bounce_status === 'OK' || d.bounce_status === 'Present') ? 'Present' : (d.bounce_status === 'MISSING' || !d.bounce_status ? 'None' : d.bounce_status);
+      d.warmup_em_status = d.warmup_em_status || 'None';
+      d.warmup_send_status = d.warmup_send_status || 'None';
 
       if (d.spf_status === null || d.spf_status === 'null') {
         d.isPending = true;
@@ -133,7 +138,7 @@ import Layout from '../layouts/Layout.astro';
       } else { d.virtual_dmarc = d.dmarc_status; }
 
       d.isCritical = d.virtual_spf !== 'OK' && d.virtual_spf !== 'WARNING' || d.virtual_dmarc !== 'OK' && d.virtual_dmarc !== 'WARNING';
-      d.isConfig = !d.isCritical && (d.dkim1_status !== 'OK' || d.dkim2_status !== 'OK' || d.bounce_status !== 'OK');
+      d.isConfig = !d.isCritical && (d.dkim1_status !== 'OK' || d.dkim2_status !== 'OK' || d.bounce_status !== 'Present');
 
       return d;
     });
@@ -168,7 +173,7 @@ import Layout from '../layouts/Layout.astro';
       return diff !== 0 ? diff : a.domain.localeCompare(b.domain);
     });
 
-    currentFilteredData = filtered; // Сохраняем для экспорта
+    currentFilteredData = filtered; 
     renderTable(filtered);
     renderSummary(productData);
   }
@@ -232,14 +237,13 @@ import Layout from '../layouts/Layout.astro';
     } catch (err) { console.error(err); btn.innerHTML = '❌ Error'; btn.classList.remove('loading'); }
   };
 
-  // ФУНКЦИЯ ЭКСПОРТА CSV
   (window as any).downloadCSV = () => {
     if (currentFilteredData.length === 0) {
       alert("No data available to export.");
       return;
     }
     
-    const headers = ['Domain', 'Product', 'Account Type', 'SPF Status', 'DMARC Status', 'DKIM 1', 'DKIM 2', 'Bounce', 'Last Checked'];
+    const headers = ['Domain', 'Product', 'Account Type', 'SPF Status', 'DMARC Status', 'DKIM 1', 'DKIM 2', 'Bounce', 'Warmup EM', 'Warmup SEND', 'Last Checked'];
     const rows = currentFilteredData.map(d => [
       d.domain,
       d.product,
@@ -248,7 +252,9 @@ import Layout from '../layouts/Layout.astro';
       d.virtual_dmarc,
       d.dkim1_status || 'MISSING',
       d.dkim2_status || 'MISSING',
-      d.bounce_status || 'MISSING',
+      d.bounce_status || 'None',
+      d.warmup_em_status || 'None',
+      d.warmup_send_status || 'None',
       d.last_checked || 'PENDING'
     ]);
 
@@ -316,11 +322,21 @@ import Layout from '../layouts/Layout.astro';
                     <div class="records-container">${renderValidatedRecords(row.dmarc_record, row.dmarc_status, row.dmarcData, 'DMARC', row.isPending)}</div>
                   </div>
                   <div class="detail-item">
-                    <label>CNAME Configuration:</label>
+                    <label>DKIM Configuration:</label>
                     <div class="cname-list">
                       <div class="${row.dkim1_status === 'OK' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">tec1._domainkey: ${row.dkim1_status || 'PENDING'}</div>
                       <div class="${row.dkim2_status === 'OK' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">tec2._domainkey: ${row.dkim2_status || 'PENDING'}</div>
-                      <div class="${row.bounce_status === 'OK' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">bounce: ${row.bounce_status || 'PENDING'}</div>
+                    </div>
+                    
+                    <label style="margin-top: 15px;">Custom Return-Path:</label>
+                    <div class="cname-list">
+                      <div class="${row.bounce_status === 'Present' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">bounce: ${row.bounce_status || 'PENDING'}</div>
+                    </div>
+
+                    <label style="margin-top: 15px;">Tiny Warmup:</label>
+                    <div class="cname-list">
+                      <div class="${row.warmup_em_status === 'Present' ? 'ok' : (row.warmup_em_status === 'ERROR' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">em: ${row.warmup_em_status || 'PENDING'}</div>
+                      <div class="${row.warmup_send_status === 'Present' ? 'ok' : (row.warmup_send_status === 'ERROR' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">send: ${row.warmup_send_status || 'PENDING'}</div>
                     </div>
                   </div>
                   <div class="refresh-action">
@@ -370,7 +386,12 @@ import Layout from '../layouts/Layout.astro';
     return `<span class="badge ${cls}">${s}</span>`;
   }
 
-  function getSmallIcon(s) { if (s === 'OK') return '✅'; return !s || s === 'null' ? '⏳' : '❌'; }
+  function getSmallIcon(s) { 
+    if (s === 'OK' || s === 'Present') return '✅'; 
+    if (!s || s === 'null' || s === 'PENDING') return '⏳'; 
+    return '❌'; 
+  }
+  
   function formatDate(d) { if (!d || d.includes('1970')) return '—'; return new Date(d).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
 
   init();
@@ -382,7 +403,6 @@ import Layout from '../layouts/Layout.astro';
   .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
   .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
 
-  /* TABS STYLE */
   .product-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
   .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1.1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
   .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
@@ -400,7 +420,6 @@ import Layout from '../layouts/Layout.astro';
   .stat-card.pending-card { border-left: 6px solid #a0aec0 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
 
-  /* SEARCH & EXPORT BAR */
   .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
   .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 350px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
   .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; border: none; background: #2d3748; color: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -463,10 +482,13 @@ import Layout from '../layouts/Layout.astro';
   .warn-badge { background: #ecc94b !important; color: #744210 !important; }
   .err-badge { background: #e53e3e !important; }
 
+  /* CNAME List Styles */
   .cname-list div { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; padding-left: 20px; position: relative; }
   .cname-list .ok::before { content: '✅'; position: absolute; left: 0; }
   .cname-list .missing { color: #e53e3e !important; }
   .cname-list .missing::before { content: '❌'; position: absolute; left: 0; }
+  .cname-list .error { color: #e53e3e !important; }
+  .cname-list .error::before { content: '❌'; position: absolute; left: 0; }
   .cname-list .wait { color: #718096 !important; }
   .cname-list .wait::before { content: '⏳'; position: absolute; left: 0; }
 
