@@ -109,7 +109,6 @@ import Layout from '../layouts/Layout.astro';
       d.product = d.product || 'TinyEmail';
       d.account_type = d.account_type || 'Non-Major';
       
-      // Конвертируем старые значения bounce для совместимости
       d.bounce_status = (d.bounce_status === 'OK' || d.bounce_status === 'Present') ? 'Present' : (d.bounce_status === 'MISSING' || !d.bounce_status ? 'None' : d.bounce_status);
       d.warmup_em_status = d.warmup_em_status || 'None';
       d.warmup_send_status = d.warmup_send_status || 'None';
@@ -335,8 +334,8 @@ import Layout from '../layouts/Layout.astro';
 
                     <label style="margin-top: 15px;">Tiny Warmup:</label>
                     <div class="cname-list">
-                      <div class="${row.warmup_em_status === 'Present' ? 'ok' : (row.warmup_em_status === 'ERROR' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">em: ${row.warmup_em_status || 'PENDING'}</div>
-                      <div class="${row.warmup_send_status === 'Present' ? 'ok' : (row.warmup_send_status === 'ERROR' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">send: ${row.warmup_send_status || 'PENDING'}</div>
+                      <div class="${row.warmup_em_status === 'Present and Match' ? 'ok' : (row.warmup_em_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">em: ${row.warmup_em_status || 'PENDING'}</div>
+                      <div class="${row.warmup_send_status === 'Present and Match' ? 'ok' : (row.warmup_send_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">send: ${row.warmup_send_status || 'PENDING'}</div>
                     </div>
                   </div>
                   <div class="refresh-action">
@@ -387,7 +386,7 @@ import Layout from '../layouts/Layout.astro';
   }
 
   function getSmallIcon(s) { 
-    if (s === 'OK' || s === 'Present') return '✅'; 
+    if (s === 'OK' || s === 'Present' || s === 'Present and Match') return '✅'; 
     if (!s || s === 'null' || s === 'PENDING') return '⏳'; 
     return '❌'; 
   }
