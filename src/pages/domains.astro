@@ -1,0 +1,155 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="DNS Health Check | ivandeliver.email">
+  <main class="domains-wrapper">
+    <div class="header">
+      <div class="title-area">
+        <h1>DNS Health Monitor</h1>
+        <p>Real-time status of SPF, DMARC, and DKIM for 344+ client domains.</p>
+      </div>
+      <div class="actions">
+        <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field" />
+        <a href="/monitor" class="btn">SNDS Monitor</a>
+      </div>
+    </div>
+
+    <div id="dns-summary" class="summary-grid">
+      </div>
+
+    <div class="card table-container">
+      <div class="scroll-area">
+        <table id="dnsTable">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th>SPF</th>
+              <th>DMARC</th>
+              <th>DKIM 1 (tec1)</th>
+              <th>DKIM 2 (tec2)</th>
+              <th>Bounce</th>
+              <th>Last Checked</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="7" style="text-align:center;">Loading DNS data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
+  let rawData = [];
+
+  async function init() {
+    try {
+      const response = await fetch(API_URL);
+      rawData = await response.json();
+      renderTable(rawData);
+      renderSummary(rawData);
+
+      // Живой поиск
+      document.getElementById('domainSearch')?.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = rawData.filter(d => d.domain.includes(term));
+        renderTable(filtered);
+      });
+    } catch (err) {
+      console.error("DNS Load Error:", err);
+    }
+  }
+
+  function renderSummary(data) {
+    const container = document.getElementById('dns-summary');
+    if (!container) return;
+
+    const issues = data.filter(d => 
+      d.spf_status !== 'OK' || d.dmarc_status !== 'OK' || d.dkim1_status !== 'OK'
+    ).length;
+
+    container.innerHTML = `
+      <div class="stat-card info">
+        <span class="stat-label">Total Domains</span>
+        <span class="stat-value">${data.length}</span>
+      </div>
+      <div class="stat-card ${issues > 0 ? 'danger' : 'success'}">
+        <span class="stat-label">Domains with Issues</span>
+        <span class="stat-value">${issues}</span>
+      </div>
+    `;
+  }
+
+  function renderTable(data) {
+    const tbody = document.querySelector('#dnsTable tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = data.map(row => {
+      return `
+        <tr>
+          <td><strong>${row.domain}</strong></td>
+          <td>${getStatusBadge(row.spf_status, row.spf_record)}</td>
+          <td>${getStatusBadge(row.dmarc_status, row.dmarc_record)}</td>
+          <td class="center">${row.dkim1_status === 'OK' ? '✅' : '❌'}</td>
+          <td class="center">${row.dkim2_status === 'OK' ? '✅' : '❌'}</td>
+          <td class="center">${row.bounce_status === 'OK' ? '✅' : '❌'}</td>
+          <td class="date-col">${formatDate(row.last_checked)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function getStatusBadge(status, record) {
+    let cls = 'badge-gray';
+    if (status === 'OK') cls = 'badge-green';
+    if (status === 'DUPLICATE') cls = 'badge-red';
+    if (status === 'MISSING') cls = 'badge-yellow';
+
+    return `<span class="badge ${cls}" title="${record || ''}">${status}</span>`;
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr || dateStr.includes('1970')) return 'Waiting...';
+    const date = new Date(dateStr);
+    return date.toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  init();
+</script>
+
+<style is:global>
+  .domains-wrapper { padding: 2rem; max-width: 1300px; margin: 0 auto; color: #1a202c; font-family: system-ui, sans-serif; }
+  .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
+  
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: #fff; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568; display: block; margin-bottom: 0.5rem; }
+  .stat-value { font-size: 1.8rem; font-weight: 900; color: #000; }
+  
+  .stat-card.danger { border-left: 6px solid #e53e3e; }
+  .stat-card.success { border-left: 6px solid #38a169; }
+  .stat-card.info { border-left: 6px solid #3182ce; }
+
+  .card { background: white; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 12px; background: #f7fafc; border-bottom: 2px solid #edf2f7; font-size: 0.75rem; text-transform: uppercase; color: #4a5568; }
+  td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 0.9rem; }
+  
+  .center { text-align: center; }
+  .date-col { font-size: 0.75rem; color: #718096; white-space: nowrap; }
+
+  .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: help; }
+  .badge-green { background: #c6f6d5; color: #22543d; }
+  .badge-yellow { background: #feebc8; color: #744210; }
+  .badge-red { background: #fed7d7; color: #822727; }
+  .badge-gray { background: #edf2f7; color: #4a5568; }
+
+  .input-field { padding: 10px 15px; border: 1px solid #cbd5e0; border-radius: 8px; width: 300px; outline: none; transition: border 0.2s; }
+  .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+  
+  .btn { padding: 10px 20px; background: #3182ce; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; }
+</style>
