@@ -405,4 +405,34 @@ import Layout from '../layouts/Layout.astro';
   .validation-box { margin-top: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.8rem; }
   .val-msg { margin-bottom: 4px; font-weight: 600; }
   .val-msg:last-child { margin-bottom: 0; }
-  .val-err { color: #e53e3e
+  .val-err { color: #e53e3e; }
+  .val-warn { color: #d69e2e; }
+  .val-ok { color: #38a169; }
+  
+  .lookup-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.7rem; margin-bottom: 8px; color: #fff; }
+  .ok-badge { background: #48bb78; }
+  .warn-badge { background: #ecc94b; color: #744210; }
+  .err-badge { background: #e53e3e; }
+
+  .cname-list div { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; padding-left: 20px; position: relative; }
+  .cname-list .ok::before { content: '✅'; position: absolute; left: 0; }
+  .cname-list .missing { color: #e53e3e; }
+  .cname-list .missing::before { content: '❌'; position: absolute; left: 0; }
+  .cname-list .wait { color: #718096; }
+  .cname-list .wait::before { content: '⏳'; position: absolute; left: 0; }
+
+  .refresh-action { display: flex; justify-content: flex-end; align-items: flex-start; }
+  .btn-refresh { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: #10b981; color: white; border: none; padding: 15px; border-radius: 12px; font-weight: 800; font-size: 0.8rem; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); width: 100%; text-transform: uppercase; }
+  .btn-refresh svg { width: 28px; height: 28px; transition: transform 0.3s ease; }
+  .btn-refresh:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 6px 10px rgba(16, 185, 129, 0.3); }
+  .btn-refresh:hover svg { transform: rotate(45deg); }
+  .btn-refresh.loading { background: #9ca3af; cursor: not-allowed; transform: none; box-shadow: none; pointer-events: none; }
+
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+  .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; }
+  .badge-green { background: #c6f6d5; color: #22543d; }
+  .badge-red { background: #fed7d7; color: #822727; }
+  .badge-yellow { background: #feebc8; color: #744210; }
+  .badge-gray { background: #edf2f7; color: #4a5568; }
+</style>
