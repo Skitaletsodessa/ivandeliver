@@ -4,20 +4,30 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="DNS Health Check | ivandeliver.email">
   <main class="domains-wrapper">
-    <div class="header">
+    <nav class="nav-bar">
+      <div class="logo-area">
+        <div class="logo-text">IVAN DELIVER Experience</div>
+      </div>
+      <div class="nav-group">
+        <a href="#" class="nav-link">Focus</a>
+        <a href="#" class="nav-link">About</a>
+        <a href="#" class="nav-btn">Contact</a>
+        <a href="/monitor" class="nav-btn">SNDS Monitor</a> </div>
+    </nav>
+
+    <div class="content-header">
       <div class="title-area">
         <h1>DNS Health Monitor</h1>
-        <p>Click rows to see all duplicated or missing records.</p>
-      </div>
-      <div class="actions-bar">
-        <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field" />
-        <div class="nav-btns">
-          <a href="/monitor" class="btn btn-secondary">SNDS Monitor</a>
-        </div>
+        <p>Comprehensive monitoring for 344+ client domains.</p>
       </div>
     </div>
 
-    <div id="dns-summary" class="summary-grid"></div>
+    <div id="dns-summary" class="summary-grid">
+      </div>
+
+    <div class="table-actions-bar">
+      <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field" />
+    </div>
 
     <div class="card table-outer-container">
       <div class="table-scroll" id="tableContainer">
@@ -34,7 +44,7 @@ import Layout from '../layouts/Layout.astro';
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr><td colspan="7" style="text-align:center; padding: 40px;">Syncing...</td></tr>
+            <tr><td colspan="7" style="text-align:center; padding: 40px;">Syncing with checkdns...</td></tr>
           </tbody>
         </table>
       </div>
@@ -58,7 +68,7 @@ import Layout from '../layouts/Layout.astro';
       rawData = await response.json();
       applyFiltersAndRender();
       document.getElementById('domainSearch')?.addEventListener('input', applyFiltersAndRender);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error("DNS Fetch Error:", err); }
   }
 
   function applyFiltersAndRender() {
@@ -82,6 +92,7 @@ import Layout from '../layouts/Layout.astro';
   function renderSummary() {
     const container = document.getElementById('dns-summary');
     if (!container) return;
+
     const criticalCount = rawData.filter(isCritical).length;
     const configCount = rawData.filter(isConfig).length;
     const pendingCount = rawData.filter(isPending).length;
@@ -112,6 +123,10 @@ import Layout from '../layouts/Layout.astro';
   function renderTable(data) {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
+    if (data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px;">No domains found for this category.</td></tr>`;
+      return;
+    }
     let html = '';
     data.forEach(row => {
       const isExpanded = expandedDomain === row.domain;
@@ -126,7 +141,6 @@ import Layout from '../layouts/Layout.astro';
           <td class="date-col">${formatDate(row.last_checked)}</td>
         </tr>
       `;
-
       if (isExpanded) {
         html += `
           <tr class="details-row">
@@ -135,22 +149,18 @@ import Layout from '../layouts/Layout.astro';
                 <div class="details-grid">
                   <div class="detail-item ${row.spf_status !== 'OK' && !isPending(row) ? 'error' : ''}">
                     <label>SPF Records:</label>
-                    <div class="records-container">
-                      ${renderRecords(row.spf_record, row.spf_status, 'SPF')}
-                    </div>
+                    <div class="records-container">${renderRecords(row.spf_record, row.spf_status, 'SPF', isPending(row))}</div>
                   </div>
                   <div class="detail-item ${row.dmarc_status !== 'OK' && !isPending(row) ? 'error' : ''}">
                     <label>DMARC Records:</label>
-                    <div class="records-container">
-                      ${renderRecords(row.dmarc_record, row.dmarc_status, 'DMARC')}
-                    </div>
+                    <div class="records-container">${renderRecords(row.dmarc_record, row.dmarc_status, 'DMARC', isPending(row))}</div>
                   </div>
                   <div class="detail-item">
                     <label>CNAME Configuration:</label>
                     <div class="cname-list">
-                      <div class="${row.dkim1_status === 'OK' ? 'ok' : 'missing'}">tec1._domainkey: ${row.dkim1_status || 'PENDING'}</div>
-                      <div class="${row.dkim2_status === 'OK' ? 'ok' : 'missing'}">tec2._domainkey: ${row.dkim2_status || 'PENDING'}</div>
-                      <div class="${row.bounce_status === 'OK' ? 'ok' : 'missing'}">bounce: ${row.bounce_status || 'PENDING'}</div>
+                      <div class="${row.dkim1_status === 'OK' ? 'ok' : (isPending(row) ? 'wait' : 'missing')}">tec1._domainkey: ${row.dkim1_status || 'PENDING'}</div>
+                      <div class="${row.dkim2_status === 'OK' ? 'ok' : (isPending(row) ? 'wait' : 'missing')}">tec2._domainkey: ${row.dkim2_status || 'PENDING'}</div>
+                      <div class="${row.bounce_status === 'OK' ? 'ok' : (isPending(row) ? 'wait' : 'missing')}">bounce: ${row.bounce_status || 'PENDING'}</div>
                     </div>
                   </div>
                 </div>
@@ -163,19 +173,11 @@ import Layout from '../layouts/Layout.astro';
     tbody.innerHTML = html;
   }
 
-  // НОВАЯ ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ СПИСКА ЗАПИСЕЙ
-  function renderRecords(recordStr, status, type) {
+  function renderRecords(recordStr, status, type, pending) {
+    if (pending) return `<div class="record-text gray">⏳ Waiting for initial check...</div>`;
     if (!recordStr || recordStr === '') return `<div class="record-text missing">❌ NO ${type} RECORD FOUND</div>`;
-    
-    // Если есть дубликаты, они разделены через |
     const records = recordStr.split(' | ');
-    
-    return records.map(rec => `
-      <div class="record-wrapper ${status === 'DUPLICATE' ? 'is-duplicate' : ''}">
-        <div class="record-text">${rec}</div>
-        ${status === 'DUPLICATE' ? `<span class="dup-warn">⚠️ DUPLICATE! REMOVE THIS</span>` : ''}
-      </div>
-    `).join('');
+    return records.map(rec => `<div class="record-wrapper ${status === 'DUPLICATE' ? 'is-duplicate' : ''}"><div class="record-text">${rec}</div>${status === 'DUPLICATE' ? `<span class="dup-warn">⚠️ DUPLICATE! REMOVE THIS</span>` : ''}</div>`).join('');
   }
 
   function getStatusBadge(s) {
@@ -184,79 +186,90 @@ import Layout from '../layouts/Layout.astro';
     return `<span class="badge ${cls}">${s}</span>`;
   }
 
-  function getSmallIcon(s) {
-    if (s === 'OK') return '✅';
-    return s === null || s === 'null' ? '⏳' : '❌';
-  }
-
-  function formatDate(d) {
-    if (!d || d.includes('1970')) return '—';
-    return new Date(d).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  }
+  function getSmallIcon(s) { if (s === 'OK') return '✅'; return s === null || s === 'null' ? '⏳' : '❌'; }
+  function formatDate(d) { if (!d || d.includes('1970')) return '—'; return new Date(d).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
 
   init();
 </script>
 
 <style is:global>
-  /* Сохраняем все твои стили из предыдущей версии */
-  .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, sans-serif; }
-  .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
-  .title-area h1 { font-size: 2rem; font-weight: 800; color: #ffffff !important; margin: 0; }
-  .title-area p { color: #a0aec0 !important; }
-
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background: #fff !important; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: 0.2s; user-select: none; }
-  .stat-card.active { border: 3px solid #3182ce !important; background: #f0f7ff !important; }
-  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; }
-  .stat-value { font-size: 1.8rem; font-weight: 900; color: #000 !important; }
+  .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, -apple-system, sans-serif; background-color: #0d1326; }
   
+  /* 1. НОВЫЙ NAVBAR Layout (Лого слева, Ссылки справа) */
+  .nav-bar { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 2rem; background-color: #0d1326; border-bottom: 1px solid #2d3748; margin-bottom: 3rem; }
+  .logo-area { display: flex; align-items: center; }
+  .logo-text { font-size: 1.25rem; font-weight: 800; color: #fff; }
+  
+  .nav-group { display: flex; gap: 1.5rem; align-items: center; }
+  .nav-link { text-decoration: none; color: #a0aec0 !important; font-size: 0.95rem; font-weight: 600; transition: color 0.2s; }
+  .nav-link:hover { color: #fff !important; }
+  
+  /* Контакт и SNDS Monitor — синие кнопки */
+  .nav-btn { padding: 10px 20px; background: #3182ce; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; display: inline-block; transition: background 0.2s; }
+  .nav-btn:hover { background: #2c5282; }
+
+  /* CONTENT HEADER (titles only, High Contrast) */
+  .content-header { margin-bottom: 3rem; }
+  .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
+  .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.75rem 0 0 0; }
+
+  /* SUMMARY */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 3rem; }
+  .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; user-select: none; }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.15); border-color: #3182ce; }
+  .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; letter-spacing: 0.05em; }
+  .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; line-height: 1.1; }
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
   .stat-card.warning { border-left: 6px solid #ed8936 !important; }
   .stat-card.pending-card { border-left: 6px solid #a0aec0 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
 
-  .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
-  .table-scroll { max-height: 65vh; overflow-y: auto; }
+  /* 3. TABLE ACTIONS BAR (Фильтр над таблицей) */
+  .table-actions-bar { display: flex; justify-content: flex-end; margin-bottom: 1.5rem; padding-right: 1rem; }
+  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 350px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
+  .input-field:focus { outline: none; border-color: #3182ce; box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2); }
+
+  /* Table Container */
+  .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  .table-scroll { max-height: 70vh; overflow-y: auto; }
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  
   thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; color: #2d3748 !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; }
   
-  .domain-row { cursor: pointer; }
+  .domain-row { cursor: pointer; transition: background 0.1s ease; }
   .domain-row:hover { background-color: #f7fafc; }
-  .domain-row.active-row { background-color: #edf2f7 !important; }
+  .domain-row.active-row { background-color: #edf2f7 !important; border-left: 4px solid #3182ce; }
   .row-alert { background-color: #fff5f5; }
 
   td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; color: #1a202c !important; }
   .center { text-align: center; }
-  .date-col { font-size: 0.8rem; color: #718096 !important; }
+  .date-col { font-size: 0.8rem; color: #718096 !important; font-weight: 500; }
 
-  /* НОВЫЕ СТИЛИ ДЛЯ СПИСКА ЗАПИСЕЙ */
+  /* Details Panel */
   .details-row td { padding: 0 !important; background-color: #f8fafc; border-bottom: 2px solid #cbd5e0; }
   .details-content { padding: 24px; animation: slideDown 0.2s ease-out; }
   .details-grid { display: grid; grid-template-columns: 1fr 1fr 280px; gap: 24px; }
-  
   .detail-item label { display: block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: #4a5568; margin-bottom: 10px; }
-  
   .records-container { display: flex; flex-direction: column; gap: 10px; }
-  .record-wrapper { position: relative; }
   .record-text { background: #fff; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; font-family: monospace; font-size: 0.85rem; word-break: break-all; color: #2d3748; line-height: 1.4; }
   .record-text.missing { color: #e53e3e; font-weight: bold; background: #fff5f5; }
-
+  .record-text.gray { color: #718096; }
   .is-duplicate .record-text { border-color: #feb2b2; border-left: 4px solid #e53e3e; }
   .dup-warn { display: inline-block; font-size: 10px; font-weight: 900; color: #e53e3e; margin-top: 4px; text-transform: uppercase; }
-
   .cname-list div { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; padding-left: 20px; position: relative; }
   .cname-list .ok::before { content: '✅'; position: absolute; left: 0; }
   .cname-list .missing { color: #e53e3e; }
   .cname-list .missing::before { content: '❌'; position: absolute; left: 0; }
+  .cname-list .wait { color: #718096; }
+  .cname-list .wait::before { content: '⏳'; position: absolute; left: 0; }
 
   @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-  .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; }
+  .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; }
   .badge-green { background: #c6f6d5; color: #22543d; }
   .badge-red { background: #fed7d7; color: #822727; }
   .badge-yellow { background: #feebc8; color: #744210; }
   .badge-gray { background: #edf2f7; color: #4a5568; }
-  
-  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 300px; font-weight: 600; color: #000 !important; background: #fff; }
-  .btn { padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-block; background: #3182ce; color: #fff !important; }
 </style>
