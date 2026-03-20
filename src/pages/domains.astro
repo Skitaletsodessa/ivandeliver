@@ -7,10 +7,10 @@ import Layout from '../layouts/Layout.astro';
     <div class="header">
       <div class="title-area">
         <h1>DNS Health Monitor</h1>
-        <p>Real-time status of SPF, DMARC, and DKIM for client domains.</p>
+        <p>Click summary cards to filter. Hover icons to see DNS records.</p>
       </div>
       <div class="actions-bar">
-        <input type="text" id="domainSearch" placeholder="Search domain..." class="input-field" />
+        <input type="text" id="domainSearch" placeholder="Filter domains..." class="input-field" />
         <div class="nav-btns">
           <a href="/monitor" class="btn btn-secondary">SNDS Monitor</a>
         </div>
@@ -35,7 +35,7 @@ import Layout from '../layouts/Layout.astro';
             </tr>
           </thead>
           <tbody>
-            <tr><td colspan="7" style="text-align:center; padding: 40px;">Initializing connection to checkdns...</td></tr>
+            <tr><td colspan="7" style="text-align:center; padding: 40px;">Loading data from checkdns...</td></tr>
           </tbody>
         </table>
       </div>
@@ -46,88 +46,102 @@ import Layout from '../layouts/Layout.astro';
 <script>
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
   let rawData = [];
+  let currentFilter = 'all'; // 'all', 'critical', 'config', 'pending'
 
   async function init() {
     try {
       const response = await fetch(API_URL);
-      if (!response.ok) throw new Error('API Response Error');
-      
+      if (!response.ok) throw new Error('API Error');
       rawData = await response.json();
-      processAndRender(rawData);
+      
+      applyFiltersAndRender();
 
-      document.getElementById('domainSearch')?.addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const filtered = rawData.filter(d => d.domain.toLowerCase().includes(term));
-        processAndRender(filtered);
+      document.getElementById('domainSearch')?.addEventListener('input', () => {
+        applyFiltersAndRender();
       });
     } catch (err) {
       console.error("DNS Fetch Error:", err);
-      const tbody = document.querySelector('#dnsTable tbody');
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: red;">Error loading data. Check console.</td></tr>`;
     }
   }
 
-  function processAndRender(data) {
-    const sorted = [...data].sort((a, b) => {
-      // Логика приоритетов: 
-      // 1. SPF/DMARC Issues (RED/YELLOW)
-      // 2. DKIM/Bounce Issues
-      // 3. OK (Alphabetical)
-      
-      const getWeight = (item) => {
-        if (item.spf_status === 'DUPLICATE' || item.spf_status === 'MISSING') return 100;
-        if (item.dmarc_status === 'DUPLICATE' || item.dmarc_status === 'MISSING') return 90;
-        if (item.dkim1_status !== 'OK' || item.dkim2_status !== 'OK' || item.bounce_status !== 'OK') return 50;
+  function applyFiltersAndRender() {
+    const searchTerm = (document.getElementById('domainSearch') as HTMLInputElement)?.value.toLowerCase() || '';
+    
+    // 1. Фильтрация по поиску
+    let filtered = rawData.filter(d => d.domain.toLowerCase().includes(searchTerm));
+
+    // 2. Фильтрация по категории
+    if (currentFilter === 'critical') {
+      filtered = filtered.filter(d => d.spf_status !== 'OK' || d.dmarc_status !== 'OK');
+    } else if (currentFilter === 'config') {
+      filtered = filtered.filter(d => (d.spf_status === 'OK' && d.dmarc_status === 'OK') && (d.dkim1_status !== 'OK' || d.dkim2_status !== 'OK' || d.bounce_status !== 'OK'));
+    } else if (currentFilter === 'pending') {
+      filtered = filtered.filter(d => !d.last_checked || d.last_checked.includes('1970'));
+    }
+
+    // 3. Сортировка
+    filtered.sort((a, b) => {
+      const getWeight = (i) => {
+        if (i.spf_status !== 'OK' || i.dmarc_status !== 'OK') return 100;
+        if (i.dkim1_status !== 'OK' || i.dkim2_status !== 'OK' || i.bounce_status !== 'OK') return 50;
         return 0;
       };
-
-      const weightA = getWeight(a);
-      const weightB = getWeight(b);
-
-      if (weightA !== weightB) return weightB - weightA;
+      const wA = getWeight(a); const wB = getWeight(b);
+      if (wA !== wB) return wB - wA;
       return a.domain.localeCompare(b.domain);
     });
 
-    renderTable(sorted);
-    renderSummary(rawData);
+    renderTable(filtered);
+    renderSummary();
   }
 
-  function renderSummary(data) {
+  function renderSummary() {
     const container = document.getElementById('dns-summary');
     if (!container) return;
 
-    const critical = data.filter(d => d.spf_status && d.spf_status !== 'OK').length;
-    const pending = data.filter(d => !d.last_checked || d.last_checked.includes('1970')).length;
+    const critical = rawData.filter(d => d.spf_status !== 'OK' || d.dmarc_status !== 'OK').length;
+    const config = rawData.filter(d => (d.spf_status === 'OK' && d.dmarc_status === 'OK') && (d.dkim1_status !== 'OK' || d.dkim2_status !== 'OK' || d.bounce_status !== 'OK')).length;
+    const pending = rawData.filter(d => !d.last_checked || d.last_checked.includes('1970')).length;
 
     container.innerHTML = `
-      <div class="stat-card info">
+      <div class="stat-card info ${currentFilter === 'all' ? 'active' : ''}" onclick="window.setDnsFilter('all')">
         <span class="stat-label">Total List</span>
-        <span class="stat-value">${data.length}</span>
+        <span class="stat-value">${rawData.length}</span>
       </div>
-      <div class="stat-card ${critical > 0 ? 'danger' : 'success'}">
-        <span class="stat-label">SPF/DMARC Alerts</span>
+      <div class="stat-card danger ${currentFilter === 'critical' ? 'active' : ''}" onclick="window.setDnsFilter('critical')">
+        <span class="stat-label">Critical (SPF/DMARC)</span>
         <span class="stat-value">${critical}</span>
       </div>
-      <div class="stat-card warning">
+      <div class="stat-card warning ${currentFilter === 'config' ? 'active' : ''}" onclick="window.setDnsFilter('config')">
+        <span class="stat-label">Config (DKIM/Bounce)</span>
+        <span class="stat-value">${config}</span>
+      </div>
+      <div class="stat-card pending-card ${currentFilter === 'pending' ? 'active' : ''}" onclick="window.setDnsFilter('pending')">
         <span class="stat-label">Pending Check</span>
         <span class="stat-value">${pending}</span>
       </div>
     `;
   }
 
-  function renderTable(data) {
+  // Делаем функцию глобальной для onclick
+  (window as any).setDnsFilter = (filter: string) => {
+    currentFilter = filter;
+    applyFiltersAndRender();
+  };
+
+  function renderTable(data: any[]) {
     const tbody = document.querySelector('#dnsTable tbody');
     if (!tbody) return;
 
     if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No domains found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 30px;">No domains found for this filter.</td></tr>`;
       return;
     }
 
     tbody.innerHTML = data.map(row => {
-      const isCritical = row.spf_status !== 'OK' && row.spf_status !== null;
+      const isCrit = row.spf_status !== 'OK' || row.dmarc_status !== 'OK';
       return `
-        <tr class="${isCritical ? 'row-alert' : ''}">
+        <tr class="${isCrit ? 'row-alert' : ''}">
           <td><strong>${row.domain}</strong></td>
           <td class="center">${getStatusBadge(row.spf_status, row.spf_record)}</td>
           <td class="center">${getStatusBadge(row.dmarc_status, row.dmarc_record)}</td>
@@ -140,109 +154,83 @@ import Layout from '../layouts/Layout.astro';
     }).join('');
   }
 
-  function getStatusBadge(status, record) {
-    if (status === null || status === 'null') return `<span class="badge badge-gray">PENDING</span>`;
-    
-    let cls = 'badge-gray';
-    if (status === 'OK') cls = 'badge-green';
-    if (status === 'DUPLICATE') cls = 'badge-red';
-    if (status === 'MISSING') cls = 'badge-yellow';
-
-    const cleanRecord = record ? record.replace(/"/g, '&quot;') : 'Record not found in DNS';
-    return `<span class="badge ${cls}" title="${cleanRecord}">${status}</span>`;
+  function getStatusBadge(status: string, record: string) {
+    if (!status || status === 'null') return `<span class="badge badge-gray">PENDING</span>`;
+    let cls = status === 'OK' ? 'badge-green' : (status === 'DUPLICATE' ? 'badge-red' : 'badge-yellow');
+    return `<span class="badge ${cls}" title="${record ? record.replace(/"/g, '&quot;') : 'No record'}">${status}</span>`;
   }
 
-  function getIcon(status, type) {
-    if (status === 'OK') return `<span class="status-icon green" title="${type} found and valid">✅</span>`;
-    if (status === null || status === 'null') return `<span class="status-icon gray" title="Waiting for check...">⏳</span>`;
-    return `<span class="status-icon red" title="${type} MISSING">❌</span>`;
+  function getIcon(status: string, type: string) {
+    if (status === 'OK') return `<span class="status-icon" title="${type} OK">✅</span>`;
+    if (!status || status === 'null') return `<span class="status-icon" title="Pending...">⏳</span>`;
+    return `<span class="status-icon" title="${type} MISSING" style="cursor:help">❌</span>`;
   }
 
-  function formatDate(dateStr) {
+  function formatDate(dateStr: string) {
     if (!dateStr || dateStr.includes('1970')) return '—';
-    const date = new Date(dateStr);
-    return date.toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return new Date(dateStr).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
   init();
 </script>
 
 <style is:global>
-  .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, -apple-system, sans-serif; }
-  
-  .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; gap: 2rem; }
+  .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, sans-serif; }
+  .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
   .title-area h1 { font-size: 2rem; font-weight: 800; color: #ffffff !important; margin: 0; }
-  .title-area p { color: #a0aec0 !important; margin: 0.5rem 0 0 0; }
+  .title-area p { color: #a0aec0 !important; }
 
-  .actions-bar { display: flex; gap: 1rem; align-items: center; }
-  
+  /* Summary Cards */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background-color: #ffffff !important; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-  
-  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; letter-spacing: 0.05em; }
-  .stat-value { font-size: 1.8rem; font-weight: 900; color: #000000 !important; }
+  .stat-card { 
+    background-color: #ffffff !important; 
+    padding: 1.25rem; 
+    border-radius: 12px; 
+    border: 1px solid #cbd5e0; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 0.5rem; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.15); }
+  .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; }
+
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; }
+  .stat-value { font-size: 1.8rem; font-weight: 900; color: #000 !important; }
   
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
   .stat-card.warning { border-left: 6px solid #ed8936 !important; }
-  .stat-card.success { border-left: 6px solid #38a169 !important; }
+  .stat-card.pending-card { border-left: 6px solid #a0aec0 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
 
-  /* TABLE STYLES */
-  .table-outer-container { background: #ffffff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
-  .table-scroll { max-height: 70vh; overflow-y: auto; position: relative; }
-
+  /* Table container */
+  .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
+  .table-scroll { max-height: 65vh; overflow-y: auto; }
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
   
-  /* STICKY HEADER */
   thead th { 
-    position: sticky; 
-    top: 0; 
-    z-index: 10; 
-    background-color: #f7fafc !important; 
-    color: #2d3748 !important; 
-    font-weight: 800; 
-    text-transform: uppercase; 
-    font-size: 0.75rem; 
-    padding: 16px 12px; 
-    border-bottom: 2px solid #cbd5e0;
-    text-align: left;
+    position: sticky; top: 0; z-index: 10; 
+    background: #f7fafc !important; color: #2d3748 !important; 
+    font-weight: 800; text-transform: uppercase; font-size: 0.75rem; 
+    padding: 16px 12px; border-bottom: 2px solid #cbd5e0;
   }
 
   td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; color: #1a202c !important; }
   tr:hover { background-color: #f8fafc; }
   .row-alert { background-color: #fff5f5; }
-
   .center { text-align: center; }
-  .date-col { font-size: 0.8rem; color: #718096 !important; font-weight: 500; }
+  .date-col { font-size: 0.8rem; color: #718096 !important; }
 
-  /* UI ELEMENTS */
-  .badge { padding: 6px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; cursor: help; display: inline-block; }
+  .badge { padding: 6px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; cursor: help; }
   .badge-green { background: #c6f6d5; color: #22543d; }
   .badge-yellow { background: #feebc8; color: #744210; }
   .badge-red { background: #fed7d7; color: #822727; }
   .badge-gray { background: #edf2f7; color: #4a5568; }
 
-  .status-icon { font-size: 1.2rem; cursor: help; }
-
-  .input-field { 
-    padding: 12px 18px; 
-    border: 2px solid #cbd5e0; 
-    border-radius: 10px; 
-    width: 300px; 
-    background: #fff !important; 
-    color: #000 !important; 
-    font-weight: 600; 
-  }
-  .input-field:focus { outline: none; border-color: #3182ce; box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2); }
-
-  .btn { 
-    padding: 12px 24px; 
-    border-radius: 10px; 
-    font-weight: 800; 
-    text-decoration: none; 
-    display: inline-block;
-    transition: all 0.2s;
-  }
-  .btn-secondary { background: #3182ce; color: #ffffff !important; }
-  .btn-secondary:hover { background: #2c5282; transform: translateY(-1px); }
+  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 300px; font-weight: 600; background: #fff !important; color: #000 !important; }
+  .btn { padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-block; }
+  .btn-secondary { background: #3182ce; color: #fff !important; }
 </style>
