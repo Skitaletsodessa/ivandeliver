@@ -47,27 +47,28 @@ import Layout from '../layouts/Layout.astro';
   let currentFilter = 'all'; 
   let expandedDomain = null;
 
-  // --- ВАЛИДАТОРЫ ---
+  // --- ОБНОВЛЕННЫЕ ВАЛИДАТОРЫ ---
   function validateSPF(recordStr) {
-    let errors = [];
-    let warnings = [];
+    let errors = new Set(); // Используем Set, чтобы ошибки не дублировались
+    let warnings = new Set();
     let lookups = 0;
 
-    if (!recordStr) return { errors: ['No SPF record found'], warnings, lookups };
+    if (!recordStr) return { errors: ['No SPF record found'], warnings: [], lookups };
 
     const records = recordStr.split(' | ');
+    const lowerRecordStr = recordStr.toLowerCase();
     
+    // Ищем наш include по всей строке, а не в каждой записи отдельно
+    if (!lowerRecordStr.includes('include:_spf.tinyemail.com')) {
+      errors.add('Missing required include: _spf.tinyemail.com');
+    }
+
     records.forEach(record => {
-      const lowerRec = record.toLowerCase();
+      const lowerRec = record.trim().toLowerCase();
       
       // Базовый синтаксис
-      if (!lowerRec.startsWith('v=spf1')) errors.push('Must start exactly with "v=spf1"');
-      if (lowerRec.includes('include=')) errors.push('Typo detected: use "include:" instead of "include="');
-      
-      // Проверка TinyEmail
-      if (!lowerRec.includes('include:_spf.tinyemail.com')) {
-        errors.push('Missing required include: _spf.tinyemail.com');
-      }
+      if (!lowerRec.startsWith('v=spf1')) errors.add('Must start exactly with "v=spf1"');
+      if (lowerRec.includes('include=')) errors.add('Typo detected: use "include:" instead of "include="');
 
       // Подсчет DNS Lookups (a, mx, ptr, include, exists, redirect)
       const terms = lowerRec.split(/\s+/);
@@ -82,34 +83,34 @@ import Layout from '../layouts/Layout.astro';
           recordLookups++;
         }
       });
-      lookups = Math.max(lookups, recordLookups); // Берем максимум, если записей несколько
+      lookups = Math.max(lookups, recordLookups); // Берем максимум из дубликатов
     });
 
-    if (lookups > 10) errors.push(`DNS Lookup Limit Exceeded: ${lookups}/10`);
-    else if (lookups >= 8) warnings.push(`Approaching DNS Lookup Limit: ${lookups}/10`);
+    if (lookups > 10) errors.add(`DNS Lookup Limit Exceeded: ${lookups}/10`);
+    else if (lookups >= 8) warnings.add(`Approaching DNS Lookup Limit: ${lookups}/10`);
 
-    return { errors, warnings, lookups };
+    return { errors: Array.from(errors), warnings: Array.from(warnings), lookups };
   }
 
   function validateDMARC(recordStr) {
-    let errors = [];
-    let warnings = [];
-    if (!recordStr) return { errors: ['No DMARC record found'], warnings };
+    let errors = new Set();
+    let warnings = new Set();
+    if (!recordStr) return { errors: ['No DMARC record found'], warnings: [] };
 
     const records = recordStr.split(' | ');
     records.forEach(record => {
-      const lowerRec = record.toLowerCase();
-      if (!lowerRec.startsWith('v=dmarc1')) errors.push('Must start exactly with "v=DMARC1"');
-      if (!lowerRec.includes('p=')) errors.push('Missing policy tag (e.g., p=none, p=reject)');
+      const lowerRec = record.trim().toLowerCase();
+      if (!lowerRec.startsWith('v=dmarc1')) errors.add('Must start exactly with "v=DMARC1"');
+      if (!lowerRec.includes('p=')) errors.add('Missing policy tag (e.g., p=none, p=reject)');
       if (lowerRec.includes('p=none') && !lowerRec.includes('rua=')) {
-        warnings.push('Policy is "none" but no "rua=" (reporting) is set. Record is inactive.');
+        warnings.add('Policy is "none" but no "rua=" (reporting) is set. Record is inactive.');
       }
     });
 
-    return { errors, warnings };
+    return { errors: Array.from(errors), warnings: Array.from(warnings) };
   }
 
-  // --- ОБОГАЩЕНИЕ ДАННЫХ ---
+  // --- ОБОГАЩЕНИЕ ДАННЫХ И РЕНДЕР (Без изменений) ---
   function enrichData(data) {
     return data.map(d => {
       if (d.spf_status === null || d.spf_status === 'null') {
@@ -123,7 +124,6 @@ import Layout from '../layouts/Layout.astro';
       d.spfData = validateSPF(d.spf_record);
       d.dmarcData = validateDMARC(d.dmarc_record);
 
-      // Виртуальный статус SPF (перекрывает OK, если есть ошибки валидации)
       if (d.spf_status === 'OK') {
         if (d.spfData.errors.length > 0) d.virtual_spf = 'ERROR';
         else if (d.spfData.warnings.length > 0) d.virtual_spf = 'WARNING';
@@ -132,7 +132,6 @@ import Layout from '../layouts/Layout.astro';
         d.virtual_spf = d.spf_status;
       }
 
-      // Виртуальный статус DMARC
       if (d.dmarc_status === 'OK') {
         if (d.dmarcData.errors.length > 0) d.virtual_dmarc = 'ERROR';
         else if (d.dmarcData.warnings.length > 0) d.virtual_dmarc = 'WARNING';
@@ -206,7 +205,6 @@ import Layout from '../layouts/Layout.astro';
   (window as any).setDnsFilter = (f) => { currentFilter = f; applyFiltersAndRender(); };
   (window as any).toggleRow = (domain) => { expandedDomain = (expandedDomain === domain) ? null : domain; applyFiltersAndRender(); };
 
-  // КОПИРОВАНИЕ ДОМЕНА
   (window as any).copyDomain = (domain, btn) => {
     navigator.clipboard.writeText(domain);
     const originalText = btn.innerHTML;
@@ -262,7 +260,6 @@ import Layout from '../layouts/Layout.astro';
           <tr class="details-row">
             <td colspan="7">
               <div class="details-content">
-                
                 <div class="domain-copy-bar">
                   <span class="large-domain">${row.domain}</span>
                   <button class="btn-copy" onclick="event.stopPropagation(); window.copyDomain('${row.domain}', this)">
@@ -270,18 +267,15 @@ import Layout from '../layouts/Layout.astro';
                     Copy Domain
                   </button>
                 </div>
-
                 <div class="details-grid">
                   <div class="detail-item ${row.virtual_spf === 'ERROR' || row.virtual_spf === 'DUPLICATE' ? 'error-block' : ''}">
                     <label>SPF Records & Validation:</label>
                     <div class="records-container">${renderValidatedRecords(row.spf_record, row.spf_status, row.spfData, 'SPF', row.isPending)}</div>
                   </div>
-                  
                   <div class="detail-item ${row.virtual_dmarc === 'ERROR' || row.virtual_dmarc === 'DUPLICATE' ? 'error-block' : ''}">
                     <label>DMARC Records & Validation:</label>
                     <div class="records-container">${renderValidatedRecords(row.dmarc_record, row.dmarc_status, row.dmarcData, 'DMARC', row.isPending)}</div>
                   </div>
-                  
                   <div class="detail-item">
                     <label>CNAME Configuration:</label>
                     <div class="cname-list">
@@ -290,7 +284,6 @@ import Layout from '../layouts/Layout.astro';
                       <div class="${row.bounce_status === 'OK' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">bounce: ${row.bounce_status || 'PENDING'}</div>
                     </div>
                   </div>
-                  
                   <div class="refresh-action">
                     <button class="btn-refresh" onclick="window.refreshDomain('${row.domain}', event)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.44l5.08 5.08"/></svg>
@@ -314,7 +307,6 @@ import Layout from '../layouts/Layout.astro';
     const records = recordStr.split(' | ');
     let html = records.map(rec => `<div class="record-wrapper ${rawStatus === 'DUPLICATE' ? 'is-duplicate' : ''}"><div class="record-text">${rec}</div>${rawStatus === 'DUPLICATE' ? `<span class="dup-warn">⚠️ DUPLICATE! REMOVE THIS</span>` : ''}</div>`).join('');
     
-    // Блок валидации
     if (valData.errors.length > 0 || valData.warnings.length > 0 || valData.lookups !== undefined) {
       html += `<div class="validation-box">`;
       if (type === 'SPF') {
