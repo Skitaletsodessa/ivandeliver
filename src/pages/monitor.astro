@@ -71,3 +71,298 @@ import Layout from '../layouts/Layout.astro';
               <th data-sort="traps" class="sortable center">Traps ↕</th>
               <th data-sort="jmr_p1_sender" class="sortable center">JMR P1 Sender ↕</th>
             </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="6" style="text-align:center; padding: 40px;">Loading SNDS data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import Chart from 'chart.js/auto';
+
+  const API_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
+  let rawData = [];
+  let filteredData = [];
+  let currentPage = 1;
+  const pageSize = 100;
+  let currentSort = { key: 'date', dir: 'desc' };
+  let myChart = null;
+
+  async function init() {
+    try {
+      const response = await fetch(API_URL);
+      rawData = await response.json();
+      setRange(7);
+      renderSummary();
+      setupEventListeners();
+    } catch (err) {
+      console.error("Data load error:", err);
+    }
+  }
+
+  function renderSummary() {
+    const container = document.getElementById('summary-stats');
+    if (!container || rawData.length === 0) return;
+
+    const latestDate = [...new Set(rawData.map(r => r.date))].sort().pop();
+    const todayData = rawData.filter(r => r.date === latestDate);
+
+    const redCount = todayData.filter(r => r.filter_result === 'RED').length;
+    const trapSum = todayData.reduce((s, r) => s + (r.traps || 0), 0);
+    const jmrCount = todayData.filter(r => r.jmr_p1_sender && r.jmr_p1_sender !== '0' && r.jmr_p1_sender !== '').length;
+
+    container.innerHTML = `
+      <div class="stat-card info">
+        <span class="stat-label">Latest Data Date</span>
+        <span class="stat-value">${latestDate}</span>
+      </div>
+      <div class="stat-card ${redCount > 0 ? 'danger' : 'success'}">
+        <span class="stat-label">RED IPs Today</span>
+        <span class="stat-value">${redCount}</span>
+      </div>
+      <div class="stat-card ${trapSum > 0 ? 'warning' : ''}">
+        <span class="stat-label">Total Trap Hits</span>
+        <span class="stat-value">${trapSum}</span>
+      </div>
+      <div class="stat-card ${jmrCount > 0 ? 'warning' : ''}">
+        <span class="stat-label">JMR P1 Incidents</span>
+        <span class="stat-value">${jmrCount}</span>
+      </div>
+    `;
+  }
+
+  function setRange(days) {
+    const to = new Date().toISOString().split('T')[0];
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+    const from = fromDate.toISOString().split('T')[0];
+    (document.getElementById('dateFrom') as HTMLInputElement).value = from;
+    (document.getElementById('dateTo') as HTMLInputElement).value = to;
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const from = (document.getElementById('dateFrom') as HTMLInputElement)?.value || '';
+    const to = (document.getElementById('dateTo') as HTMLInputElement)?.value || '';
+    const search = (document.getElementById('tableSearch') as HTMLInputElement)?.value.toLowerCase() || '';
+
+    filteredData = rawData.filter(r => {
+      const dateMatch = (!from || r.date >= from) && (!to || r.date <= to);
+      const searchMatch = r.ip.toLowerCase().includes(search) || 
+                          r.filter_result.toLowerCase().includes(search) ||
+                          (r.jmr_p1_sender && String(r.jmr_p1_sender).toLowerCase().includes(search));
+      return dateMatch && searchMatch;
+    });
+
+    sortData(currentSort.key, currentSort.dir);
+    currentPage = 1;
+    renderTable();
+    renderChart(filteredData);
+  }
+
+  function sortData(key, dir) {
+    const modifier = dir === 'desc' ? 1 : -1;
+    filteredData.sort((a, b) => {
+      const hasJmr = (val) => (val && val !== '0' && val !== '') ? 1 : 0;
+      if (key === 'date') {
+        if (a.date !== b.date) return b.date.localeCompare(a.date) * modifier;
+      } else if (key === 'jmr_p1_sender') {
+        const jA = hasJmr(a.jmr_p1_sender);
+        const jB = hasJmr(b.jmr_p1_sender);
+        if (jA !== jB) return (jB - jA) * modifier;
+      } else if (key === 'ip' || key === 'filter_result') {
+        if (a[key] !== b[key]) return String(a[key]).localeCompare(String(b[key])) * modifier;
+      } else {
+        if (a[key] !== b[key]) return (b[key] - a[key]) * modifier;
+      }
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      const jA = hasJmr(a.jmr_p1_sender);
+      const jB = hasJmr(b.jmr_p1_sender);
+      if (jA !== jB) return jB - jA;
+      if (a.traps !== b.traps) return b.traps - a.traps;
+      return b.complaints - a.complaints;
+    });
+  }
+
+  function renderTable() {
+    const tbody = document.querySelector('#sndsTable tbody');
+    if (!tbody) return;
+    const start = (currentPage - 1) * pageSize;
+    const pageData = filteredData.slice(start, start + pageSize);
+
+    tbody.innerHTML = pageData.map(row => {
+      const hasJmr = row.jmr_p1_sender && row.jmr_p1_sender !== '0' && row.jmr_p1_sender !== '';
+      return `
+        <tr class="domain-row ${(row.traps > 0 || hasJmr) ? 'row-alert' : ''}">
+          <td><strong>${row.date}</strong></td>
+          <td><code class="ip-code">${row.ip}</code></td>
+          <td class="center"><span class="badge ${row.filter_result.toLowerCase()}">${row.filter_result}</span></td>
+          <td class="center">${row.complaints}%</td>
+          <td class="center"><strong>${row.traps}</strong></td>
+          <td class="center" style="font-size: 0.85rem;">
+            ${hasJmr ? `<span class="jmr-text" title="${row.jmr_p1_sender}">${row.jmr_p1_sender}</span>` : '<span style="color:#a0aec0;">0</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    const pageInfo = document.getElementById('pageInfo');
+    if (pageInfo) pageInfo.innerText = `Page ${currentPage} of ${Math.ceil(filteredData.length / pageSize) || 1}`;
+  }
+
+  function renderChart(data) {
+    const ctx = document.getElementById('sndsChart') as HTMLCanvasElement;
+    if (!ctx || !data.length) return;
+    const labels = [...new Set(data.map(item => item.date))].sort();
+    
+    const avgComplaints = labels.map(d => {
+      const dayData = data.filter(i => i.date === d);
+      return (dayData.reduce((s, c) => s + c.complaints, 0) / dayData.length).toFixed(3);
+    });
+
+    const ipCounts = labels.map(d => data.filter(i => i.date === d).length);
+
+    const jmrHits = labels.map(d => data.filter(i => i.date === d).reduce((s, c) => {
+      return s + (c.jmr_p1_sender && c.jmr_p1_sender !== '0' && c.jmr_p1_sender !== '' ? 1 : 0);
+    }, 0));
+
+    if (myChart) myChart.destroy();
+    myChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Avg Complaints %', data: avgComplaints, borderColor: '#3b82f6', tension: 0.2, yAxisID: 'yPerc' },
+          { label: 'Total IP Count', data: ipCounts, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.05)', fill: true, tension: 0.2, yAxisID: 'yCount' },
+          { label: 'JMR Events', data: jmrHits, borderColor: '#ef4444', tension: 0.2, yAxisID: 'yCount' }
+        ]
+      },
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          yPerc: { type: 'linear', position: 'left', title: { display: true, text: 'Avg Complaints %' } },
+          yCount: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Count (IP / JMR)' } }
+        }
+      }
+    });
+  }
+
+  function setupEventListeners() {
+    document.querySelectorAll('.quick-filter').forEach(btn => {
+      (btn as HTMLElement).onclick = () => setRange(parseInt((btn as HTMLElement).dataset.days || '7'));
+    });
+    document.getElementById('dateFrom')?.addEventListener('change', applyFilters);
+    document.getElementById('dateTo')?.addEventListener('change', applyFilters);
+    document.getElementById('tableSearch')?.addEventListener('input', applyFilters);
+    document.getElementById('downloadCsv')?.addEventListener('click', () => {
+      const headers = ['Date', 'IP', 'Status', 'Complaints%', 'Traps', 'JMR_Data'];
+      const csv = [headers.join(','), ...filteredData.map(r => [r.date, r.ip, r.filter_result, r.complaints, r.traps, r.jmr_p1_sender].join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'snds_report.csv'; a.click();
+    });
+    document.getElementById('resetDates')?.addEventListener('click', () => {
+      (document.getElementById('dateFrom') as HTMLInputElement).value = '';
+      (document.getElementById('dateTo') as HTMLInputElement).value = '';
+      applyFilters();
+    });
+    document.querySelectorAll('th.sortable').forEach(th => {
+      (th as HTMLElement).onclick = () => {
+        const key = (th as HTMLElement).dataset.sort || 'date';
+        currentSort.dir = (currentSort.key === key && currentSort.dir === 'desc') ? 'asc' : 'desc';
+        currentSort.key = key;
+        sortData(key, currentSort.dir);
+        renderTable();
+      };
+    });
+    document.getElementById('prevPage')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderTable(); } });
+    document.getElementById('nextPage')?.addEventListener('click', () => { if (currentPage * pageSize < filteredData.length) { currentPage++; renderTable(); } });
+    document.getElementById('logoutBtn')!.onclick = () => { if(confirm("Logout from Cloudflare Access?")) window.location.href = window.location.origin + "/cdn-cgi/access/logout"; };
+  }
+
+  init();
+</script>
+
+<style is:global>
+  .monitor-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, -apple-system, sans-serif; }
+  
+  /* HEADER */
+  .content-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
+  .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
+  .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
+
+  /* SUMMARY GRID */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; letter-spacing: 0.05em; display: block; margin-bottom: 0.5rem; }
+  .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; line-height: 1.1; }
+  
+  .stat-card.info { border-left: 6px solid #3182ce !important; }
+  .stat-card.success { border-left: 6px solid #38a169 !important; }
+  .stat-card.danger { border-left: 6px solid #e53e3e !important; }
+  .stat-card.danger .stat-value { color: #c53030 !important; }
+  .stat-card.warning { border-left: 6px solid #d69e2e !important; }
+
+  /* GENERAL CARDS */
+  .card { background-color: #ffffff !important; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  
+  /* FILTER BAR */
+  .filter-bar .filter-row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
+  .filter-group label { display: block; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; margin-bottom: 8px; }
+  .input-row { display: flex; align-items: center; gap: 0.5rem; }
+  .to-sep { font-weight: bold; color: #718096; }
+  
+  /* INPUTS & BUTTONS */
+  .input-field { padding: 10px 16px; border: 2px solid #cbd5e0; border-radius: 8px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; transition: border 0.2s; }
+  .input-field:focus { outline: none; border-color: #3182ce; box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2); }
+  
+  .btn { padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s; border: none; }
+  .quick-filter { background: #edf2f7 !important; color: #2d3748 !important; border: 1px solid #cbd5e0; }
+  .quick-filter:hover { background: #e2e8f0 !important; }
+  
+  .btn-primary { background: #3182ce !important; color: #fff !important; }
+  .btn-primary:hover { background: #2c5282 !important; }
+  .btn-secondary { background: #edf2f7 !important; color: #4a5568 !important; border: 1px solid #cbd5e0; }
+  .btn-danger { background: #fff5f5 !important; color: #e53e3e !important; border: 1px solid #feb2b2; }
+  .btn-danger:hover { background: #e53e3e !important; color: #fff !important; }
+  .btn-page { background: #edf2f7 !important; color: #2d3748 !important; border: 1px solid #cbd5e0; padding: 8px 16px; }
+
+  /* CHART */
+  .chart-container { height: 380px; }
+
+  /* TABLE ACTIONS (Search & Pagination) */
+  .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .search-input { width: 300px; }
+  .pagination-controls { display: flex; align-items: center; gap: 1rem; }
+  .page-info { font-weight: 700; color: #cbd5e1; font-size: 0.95rem; }
+
+  /* TABLE */
+  .table-outer-container { padding: 0; }
+  .table-scroll { max-height: 65vh; overflow-y: auto; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  
+  thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; color: #2d3748 !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; cursor: pointer; user-select: none; }
+  thead th:hover { background: #edf2f7 !important; }
+  
+  .domain-row { transition: background 0.1s ease; }
+  .domain-row:hover { background-color: #f8fafc; }
+  .row-alert { background-color: #fff5f5 !important; }
+  .row-alert td { color: #c53030 !important; }
+
+  td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; color: #1a202c !important; }
+  .center { text-align: center; }
+  .ip-code { background: #edf2f7; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-family: monospace; color: #2d3748; }
+
+  .badge { display: inline-block; padding: 6px 12px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; min-width: 70px; text-align: center; text-transform: uppercase; }
+  .green { background: #c6f6d5 !important; color: #22543d !important; }
+  .yellow { background: #feebc8 !important; color: #744210 !important; }
+  .red { background: #fed7d7 !important; color: #822727 !important; }
+  
+  .jmr-text { display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #3182ce; font-weight: 700; cursor: help; margin: 0 auto; text-decoration: underline dotted; }
+</style>
