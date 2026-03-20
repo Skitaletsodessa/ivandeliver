@@ -41,9 +41,9 @@ import Layout from '../layouts/Layout.astro';
   </main>
 </Layout>
 
-<script>
+<script lang="ts">
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
-  let rawData = [];
+  let rawData: any[] = [];
 
   async function init() {
     try {
@@ -53,7 +53,7 @@ import Layout from '../layouts/Layout.astro';
       renderSummary(rawData);
 
       // Живой поиск
-      document.getElementById('domainSearch')?.addEventListener('input', (e) => {
+      document.getElementById('domainSearch')?.addEventListener('input', (e: any) => {
         const term = e.target.value.toLowerCase();
         const filtered = rawData.filter(d => d.domain.includes(term));
         renderTable(filtered);
@@ -63,7 +63,7 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  function renderSummary(data) {
+  function renderSummary(data: any[]) {
     const container = document.getElementById('dns-summary');
     if (!container) return;
 
@@ -83,7 +83,7 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  function renderTable(data) {
+  function renderTable(data: any[]) {
     const tbody = document.querySelector('#dnsTable tbody');
     if (!tbody) return;
 
@@ -102,7 +102,7 @@ import Layout from '../layouts/Layout.astro';
     }).join('');
   }
 
-  function getStatusBadge(status, record) {
+  function getStatusBadge(status: string, record: string) {
     let cls = 'badge-gray';
     if (status === 'OK') cls = 'badge-green';
     if (status === 'DUPLICATE') cls = 'badge-red';
@@ -111,7 +111,7 @@ import Layout from '../layouts/Layout.astro';
     return `<span class="badge ${cls}" title="${record || ''}">${status}</span>`;
   }
 
-  function formatDate(dateStr) {
+  function formatDate(dateStr: string) {
     if (!dateStr || dateStr.includes('1970')) return 'Waiting...';
     const date = new Date(dateStr);
     return date.toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -121,35 +121,47 @@ import Layout from '../layouts/Layout.astro';
 </script>
 
 <style is:global>
-  .domains-wrapper { padding: 2rem; max-width: 1300px; margin: 0 auto; color: #1a202c; font-family: system-ui, sans-serif; }
+  .domains-wrapper { padding: 2rem; max-width: 1300px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, sans-serif; }
   .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
   
+  /* Summary Grid - ПУЛЕНЕПРОБИВАЕМЫЙ КОНТРАСТ */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background: #fff; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568; display: block; margin-bottom: 0.5rem; }
-  .stat-value { font-size: 1.8rem; font-weight: 900; color: #000; }
+  .stat-card { background-color: #ffffff !important; padding: 1.25rem; border-radius: 12px; border: 1px solid #cbd5e0; display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
   
-  .stat-card.danger { border-left: 6px solid #e53e3e; }
-  .stat-card.success { border-left: 6px solid #38a169; }
-  .stat-card.info { border-left: 6px solid #3182ce; }
+  /* Подписи (Labels) - стали темнее и четче */
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #2D3748 !important; letter-spacing: 0.025em; display: block; margin-bottom: 0.5rem; }
+  
+  /* Значения (Values) - теперь чисто черные и весомые */
+  .stat-value { font-size: 1.6rem; font-weight: 900; color: #000000 !important; line-height: 1.2; }
+  
+  /* Цветовые акценты */
+  .stat-card.danger { border-left: 6px solid #e53e3e !important; }
+  .stat-card.danger .stat-value { color: #c53030 !important; }
+  .stat-card.success { border-left: 6px solid #38a169 !important; }
+  .stat-card.info { border-left: 6px solid #3182ce !important; }
 
   .card { background: white; border-radius: 12px; border: 1px solid #cbd5e0; padding: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
   
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; padding: 12px; background: #f7fafc; border-bottom: 2px solid #edf2f7; font-size: 0.75rem; text-transform: uppercase; color: #4a5568; }
-  td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 0.9rem; }
+  /* Таблица - Контраст обновлен */
+  table { width: 100%; border-collapse: collapse; background: #fff !important; }
+  th { text-align: left; padding: 12px; background: #f7fafc !important; border-bottom: 2px solid #edf2f7; font-size: 0.75rem; text-transform: uppercase; color: #2d3748 !important; font-weight: 700; cursor: pointer; }
+  td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 0.9rem; color: #1a202c !important; }
   
   .center { text-align: center; }
   .date-col { font-size: 0.75rem; color: #718096; white-space: nowrap; }
 
+  /* Бейджи - Контраст обновлен */
   .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: help; }
   .badge-green { background: #c6f6d5; color: #22543d; }
   .badge-yellow { background: #feebc8; color: #744210; }
   .badge-red { background: #fed7d7; color: #822727; }
-  .badge-gray { background: #edf2f7; color: #4a5568; }
+  .badge-gray { background: #edf2f7; color: #2d3748 !important; }
 
-  .input-field { padding: 10px 15px; border: 1px solid #cbd5e0; border-radius: 8px; width: 300px; outline: none; transition: border 0.2s; }
+  /* Инпут и плейсхолдер - Контраст обновлен */
+  .input-field { padding: 10px 15px; border: 1px solid #cbd5e0; border-radius: 8px; width: 300px; outline: none; transition: border 0.2s; background: white; color: #000000 !important; font-weight: 500; }
+  .input-field::placeholder { color: #718096 !important; }
   .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
   
+  /* Кнопки - Контраст в порядке (белый на синем) */
   .btn { padding: 10px 20px; background: #3182ce; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; }
 </style>
