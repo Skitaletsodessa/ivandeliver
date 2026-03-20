@@ -21,6 +21,10 @@ import Layout from '../layouts/Layout.astro';
 
     <div class="table-actions-bar">
       <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field" />
+      <button class="btn-export" onclick="window.downloadCSV()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Export CSV
+      </button>
     </div>
 
     <div class="card table-outer-container">
@@ -50,8 +54,9 @@ import Layout from '../layouts/Layout.astro';
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
   const CHECK_URL = 'https://checkdns.skitalets-od.workers.dev/api/check-domain?domain=';
   let rawData = [];
+  let currentFilteredData = []; // Переменная для хранения текущих отфильтрованных данных для CSV
   let currentFilter = 'all'; 
-  let currentProduct = 'TinyEmail'; // Дефолтный продукт
+  let currentProduct = 'TinyEmail';
   let expandedDomain = null;
 
   function validateSPF(recordStr) {
@@ -101,7 +106,6 @@ import Layout from '../layouts/Layout.astro';
 
   function enrichData(data) {
     return data.map(d => {
-      // Подстраховка, если в старой базе нет полей
       d.product = d.product || 'TinyEmail';
       d.account_type = d.account_type || 'Non-Major';
 
@@ -147,27 +151,24 @@ import Layout from '../layouts/Layout.astro';
 
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('domainSearch') as HTMLInputElement)?.value.toLowerCase() || '';
-    
-    // Сначала фильтруем по текущему Продукту (Вкладке)
     let productData = rawData.filter(d => d.product === currentProduct);
-    
     let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
 
     if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
     else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
     else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
 
-    // Сортировка: Major аккаунты всегда выше в своей категории
     filtered.sort((a, b) => {
       const getWeight = (d) => {
         let weight = d.isCritical ? 1000 : (d.isConfig ? 500 : (d.isPending ? -100 : 0));
-        if (d.account_type === 'Major') weight += 50; // Буст для Major
+        if (d.account_type === 'Major') weight += 50;
         return weight;
       };
       const diff = getWeight(b) - getWeight(a);
       return diff !== 0 ? diff : a.domain.localeCompare(b.domain);
     });
 
+    currentFilteredData = filtered; // Сохраняем для экспорта
     renderTable(filtered);
     renderSummary(productData);
   }
@@ -203,7 +204,7 @@ import Layout from '../layouts/Layout.astro';
     currentProduct = prod;
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     event.currentTarget.classList.add('active');
-    currentFilter = 'all'; // Сбрасываем фильтр статуса при смене продукта
+    currentFilter = 'all'; 
     applyFiltersAndRender();
   };
 
@@ -229,6 +230,43 @@ import Layout from '../layouts/Layout.astro';
       rawData = enrichData(await response.json());
       applyFiltersAndRender();
     } catch (err) { console.error(err); btn.innerHTML = '❌ Error'; btn.classList.remove('loading'); }
+  };
+
+  // ФУНКЦИЯ ЭКСПОРТА CSV
+  (window as any).downloadCSV = () => {
+    if (currentFilteredData.length === 0) {
+      alert("No data available to export.");
+      return;
+    }
+    
+    const headers = ['Domain', 'Product', 'Account Type', 'SPF Status', 'DMARC Status', 'DKIM 1', 'DKIM 2', 'Bounce', 'Last Checked'];
+    const rows = currentFilteredData.map(d => [
+      d.domain,
+      d.product,
+      d.account_type,
+      d.virtual_spf,
+      d.virtual_dmarc,
+      d.dkim1_status || 'MISSING',
+      d.dkim2_status || 'MISSING',
+      d.bounce_status || 'MISSING',
+      d.last_checked || 'PENDING'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${currentProduct.toLowerCase()}_dns_report_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   function renderTable(data) {
@@ -362,8 +400,11 @@ import Layout from '../layouts/Layout.astro';
   .stat-card.pending-card { border-left: 6px solid #a0aec0 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
 
-  .table-actions-bar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+  /* SEARCH & EXPORT BAR */
+  .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
   .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 350px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
+  .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; border: none; background: #2d3748; color: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+  .btn-export:hover { background: #4a5568; transform: translateY(-1px); }
   
   .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
   .table-scroll { max-height: 70vh; overflow-y: auto; }
