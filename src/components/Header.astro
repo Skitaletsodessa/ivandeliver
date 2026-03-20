@@ -13,6 +13,10 @@ const logo = "/favicon.svg";
       <a href="/#experience">Experience</a>
       <a href="/#focus">Focus</a>
       <a href="/#about">About</a>
+      
+      <a href="/domains" class="monitor-btn">DNS Monitor</a>
+      <a href="/monitor" class="monitor-btn">SNDS Monitor</a>
+      
       <a href="/#contact" class="cta-btn" aria-label="Contact Ivan via Email">Contact</a>
     </div>
   </div>
@@ -32,7 +36,7 @@ const logo = "/favicon.svg";
   }
 
   .header-content {
-    max-width: 1100px;
+    max-width: 1400px; /* Немного расширил, чтобы влезли новые кнопки */
     margin: 0 auto;
     display: flex;
     justify-content: space-between;
@@ -65,7 +69,7 @@ const logo = "/favicon.svg";
   .nav-links {
     display: flex;
     align-items: center;
-    gap: 2rem;
+    gap: 1.5rem; /* Чуть уменьшил отступ, чтобы всё смотрелось компактно */
   }
 
   .nav-links a {
@@ -80,6 +84,21 @@ const logo = "/favicon.svg";
     color: white;
   }
 
+  /* Стили для новых кнопок мониторов */
+  .monitor-btn {
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    padding: 0.4rem 1rem;
+    border-radius: 50px;
+    transition: all 0.3s ease !important;
+    font-weight: 600 !important;
+  }
+
+  .monitor-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: #3b82f6;
+    color: #ffffff !important;
+  }
+
   .cta-btn {
     background: #2563eb; /* Чуть более насыщенный синий */
     color: #ffffff !important;
@@ -88,7 +107,7 @@ const logo = "/favicon.svg";
     font-weight: 700 !important; /* Жирнее, это помогает прохождению теста */
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 900px) {
     .nav-links { display: none; } /* Для мобилок потом сделаем меню-гамбургер */
   }
 </style>

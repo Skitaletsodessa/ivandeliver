@@ -4,17 +4,6 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="DNS Health Check | ivandeliver.email">
   <main class="domains-wrapper">
-    <nav class="nav-bar">
-      <div class="logo-area">
-        <div class="logo-text">IVAN DELIVER Experience</div>
-      </div>
-      <div class="nav-group">
-        <a href="#" class="nav-link">Focus</a>
-        <a href="#" class="nav-link">About</a>
-        <a href="#" class="nav-btn">Contact</a>
-        <a href="/monitor" class="nav-btn">SNDS Monitor</a> </div>
-    </nav>
-
     <div class="content-header">
       <div class="title-area">
         <h1>DNS Health Monitor</h1>
@@ -22,8 +11,7 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
-    <div id="dns-summary" class="summary-grid">
-      </div>
+    <div id="dns-summary" class="summary-grid"></div>
 
     <div class="table-actions-bar">
       <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field" />
@@ -44,7 +32,7 @@ import Layout from '../layouts/Layout.astro';
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr><td colspan="7" style="text-align:center; padding: 40px;">Syncing with checkdns...</td></tr>
+            <tr><td colspan="7" style="text-align:center; padding: 40px;">Syncing data...</td></tr>
           </tbody>
         </table>
       </div>
@@ -92,7 +80,6 @@ import Layout from '../layouts/Layout.astro';
   function renderSummary() {
     const container = document.getElementById('dns-summary');
     if (!container) return;
-
     const criticalCount = rawData.filter(isCritical).length;
     const configCount = rawData.filter(isConfig).length;
     const pendingCount = rawData.filter(isPending).length;
@@ -193,41 +180,26 @@ import Layout from '../layouts/Layout.astro';
 </script>
 
 <style is:global>
-  .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, -apple-system, sans-serif; background-color: #0d1326; }
+  .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; color: #1a202c !important; font-family: system-ui, -apple-system, sans-serif; }
   
-  /* 1. НОВЫЙ NAVBAR Layout (Лого слева, Ссылки справа) */
-  .nav-bar { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 2rem; background-color: #0d1326; border-bottom: 1px solid #2d3748; margin-bottom: 3rem; }
-  .logo-area { display: flex; align-items: center; }
-  .logo-text { font-size: 1.25rem; font-weight: 800; color: #fff; }
-  
-  .nav-group { display: flex; gap: 1.5rem; align-items: center; }
-  .nav-link { text-decoration: none; color: #a0aec0 !important; font-size: 0.95rem; font-weight: 600; transition: color 0.2s; }
-  .nav-link:hover { color: #fff !important; }
-  
-  /* Контакт и SNDS Monitor — синие кнопки */
-  .nav-btn { padding: 10px 20px; background: #3182ce; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; display: inline-block; transition: background 0.2s; }
-  .nav-btn:hover { background: #2c5282; }
-
-  /* CONTENT HEADER (titles only, High Contrast) */
-  .content-header { margin-bottom: 3rem; }
+  .content-header { margin-bottom: 2rem; }
   .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
-  .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.75rem 0 0 0; }
+  .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
 
-  /* SUMMARY */
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 3rem; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; user-select: none; }
   .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.15); border-color: #3182ce; }
   .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
 
   .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; letter-spacing: 0.05em; }
-  .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; line-height: 1.1; }
+  .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; line-height: 1.1; margin-top: 5px; display: block; }
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
   .stat-card.warning { border-left: 6px solid #ed8936 !important; }
   .stat-card.pending-card { border-left: 6px solid #a0aec0 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
 
-  /* 3. TABLE ACTIONS BAR (Фильтр над таблицей) */
-  .table-actions-bar { display: flex; justify-content: flex-end; margin-bottom: 1.5rem; padding-right: 1rem; }
+  /* SEARCH BAR (Фильтр над таблицей) */
+  .table-actions-bar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
   .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 350px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
   .input-field:focus { outline: none; border-color: #3182ce; box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2); }
 
