@@ -38,11 +38,12 @@ import Layout from '../layouts/Layout.astro';
               <th class="center">DKIM 1</th>
               <th class="center">DKIM 2</th>
               <th class="center">Bounce</th>
+              <th class="center">Warmup</th>
               <th>Last Checked</th>
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr><td colspan="7" style="text-align:center; padding: 40px; color: #1a202c;">Syncing data...</td></tr>
+            <tr><td colspan="8" style="text-align:center; padding: 40px; color: #1a202c;">Syncing data...</td></tr>
           </tbody>
         </table>
       </div>
@@ -112,6 +113,9 @@ import Layout from '../layouts/Layout.astro';
       d.bounce_status = (d.bounce_status === 'OK' || d.bounce_status === 'Present') ? 'Present' : (d.bounce_status === 'MISSING' || !d.bounce_status ? 'None' : d.bounce_status);
       d.warmup_em_status = d.warmup_em_status || 'None';
       d.warmup_send_status = d.warmup_send_status || 'None';
+      
+      // Виртуальный статус для колонки Warmup (галочка если оба матчатся)
+      d.virtual_warmup = (d.warmup_em_status === 'Present and Match' && d.warmup_send_status === 'Present and Match') ? 'OK' : 'MISSING';
 
       if (d.spf_status === null || d.spf_status === 'null') {
         d.isPending = true;
@@ -278,7 +282,7 @@ import Layout from '../layouts/Layout.astro';
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
     if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #1a202c;">No domains found for ${currentProduct}.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 20px; color: #1a202c;">No domains found for ${currentProduct}.</td></tr>`;
       return;
     }
     let html = '';
@@ -286,6 +290,13 @@ import Layout from '../layouts/Layout.astro';
       const isExpanded = expandedDomain === row.domain;
       const majorBadge = row.account_type === 'Major' ? `<span class="major-badge" title="Major Account">⭐</span>` : '';
       
+      // Динамическая генерация текста и классов для Tiny Warmup
+      let emClass = row.warmup_em_status === 'Present and Match' ? 'ok' : (row.warmup_em_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'));
+      let emMsg = row.warmup_em_status === 'Present and Match' ? 'emtny.tec-send3.com' : (row.warmup_em_status === 'Present Mismatch' ? 'Mismatch (Expected: emtny.tec-send3.com)' : (row.isPending ? 'PENDING' : 'Missing (Add CNAME -> emtny.tec-send3.com)'));
+
+      let sendClass = row.warmup_send_status === 'Present and Match' ? 'ok' : (row.warmup_send_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'));
+      let sendMsg = row.warmup_send_status === 'Present and Match' ? 'send.tec-send3.com' : (row.warmup_send_status === 'Present Mismatch' ? 'Mismatch (Expected: send.tec-send3.com)' : (row.isPending ? 'PENDING' : 'Missing (Add CNAME -> send.tec-send3.com)'));
+
       html += `
         <tr class="domain-row ${row.isCritical ? 'row-alert' : ''} ${isExpanded ? 'active-row' : ''}" onclick="window.toggleRow('${row.domain}')">
           <td class="domain-text"><strong>${row.domain}</strong> ${majorBadge}</td>
@@ -294,13 +305,14 @@ import Layout from '../layouts/Layout.astro';
           <td class="center">${getSmallIcon(row.dkim1_status)}</td>
           <td class="center">${getSmallIcon(row.dkim2_status)}</td>
           <td class="center">${getSmallIcon(row.bounce_status)}</td>
+          <td class="center" style="font-weight:bold; color: #4a5568;">${row.virtual_warmup === 'OK' ? '✅' : '—'}</td>
           <td class="date-col">${formatDate(row.last_checked)}</td>
         </tr>
       `;
       if (isExpanded) {
         html += `
           <tr class="details-row">
-            <td colspan="7">
+            <td colspan="8">
               <div class="details-content">
                 <div class="domain-copy-bar">
                   <span class="large-domain">${row.domain}</span>
@@ -334,8 +346,8 @@ import Layout from '../layouts/Layout.astro';
 
                     <label style="margin-top: 15px;">Tiny Warmup:</label>
                     <div class="cname-list">
-                      <div class="${row.warmup_em_status === 'Present and Match' ? 'ok' : (row.warmup_em_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">em: ${row.warmup_em_status || 'PENDING'}</div>
-                      <div class="${row.warmup_send_status === 'Present and Match' ? 'ok' : (row.warmup_send_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'))}">send: ${row.warmup_send_status || 'PENDING'}</div>
+                      <div class="${emClass}">em: ${emMsg}</div>
+                      <div class="${sendClass}">send: ${sendMsg}</div>
                     </div>
                   </div>
                   <div class="refresh-action">
