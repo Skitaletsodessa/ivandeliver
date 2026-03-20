@@ -11,6 +11,12 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
+    <div class="product-tabs">
+      <button class="tab-btn active" onclick="window.setProductFilter('TinyEmail', event)">TinyEmail</button>
+      <button class="tab-btn" onclick="window.setProductFilter('TinyAlbert', event)">TinyAlbert</button>
+      <button class="tab-btn" onclick="window.setProductFilter('TinyRelay', event)">TinyRelay</button>
+    </div>
+
     <div id="dns-summary" class="summary-grid"></div>
 
     <div class="table-actions-bar">
@@ -45,50 +51,35 @@ import Layout from '../layouts/Layout.astro';
   const CHECK_URL = 'https://checkdns.skitalets-od.workers.dev/api/check-domain?domain=';
   let rawData = [];
   let currentFilter = 'all'; 
+  let currentProduct = 'TinyEmail'; // Дефолтный продукт
   let expandedDomain = null;
 
-  // --- ОБНОВЛЕННЫЕ ВАЛИДАТОРЫ ---
   function validateSPF(recordStr) {
-    let errors = new Set(); // Используем Set, чтобы ошибки не дублировались
+    let errors = new Set();
     let warnings = new Set();
     let lookups = 0;
-
     if (!recordStr) return { errors: ['No SPF record found'], warnings: [], lookups };
-
     const records = recordStr.split(' | ');
     const lowerRecordStr = recordStr.toLowerCase();
     
-    // Ищем наш include по всей строке, а не в каждой записи отдельно
     if (!lowerRecordStr.includes('include:_spf.tinyemail.com')) {
       errors.add('Missing required include: _spf.tinyemail.com');
     }
-
     records.forEach(record => {
       const lowerRec = record.trim().toLowerCase();
-      
-      // Базовый синтаксис
       if (!lowerRec.startsWith('v=spf1')) errors.add('Must start exactly with "v=spf1"');
       if (lowerRec.includes('include=')) errors.add('Typo detected: use "include:" instead of "include="');
-
-      // Подсчет DNS Lookups (a, mx, ptr, include, exists, redirect)
       const terms = lowerRec.split(/\s+/);
       let recordLookups = 0;
       terms.forEach(t => {
-        if (t === 'a' || t.startsWith('a:') || 
-            t === 'mx' || t.startsWith('mx:') || 
-            t.startsWith('include:') || 
-            t === 'ptr' || t.startsWith('ptr:') || 
-            t.startsWith('exists:') || 
-            t.startsWith('redirect=')) {
+        if (t === 'a' || t.startsWith('a:') || t === 'mx' || t.startsWith('mx:') || t.startsWith('include:') || t === 'ptr' || t.startsWith('ptr:') || t.startsWith('exists:') || t.startsWith('redirect=')) {
           recordLookups++;
         }
       });
-      lookups = Math.max(lookups, recordLookups); // Берем максимум из дубликатов
+      lookups = Math.max(lookups, recordLookups);
     });
-
     if (lookups > 10) errors.add(`DNS Lookup Limit Exceeded: ${lookups}/10`);
     else if (lookups >= 8) warnings.add(`Approaching DNS Lookup Limit: ${lookups}/10`);
-
     return { errors: Array.from(errors), warnings: Array.from(warnings), lookups };
   }
 
@@ -96,7 +87,6 @@ import Layout from '../layouts/Layout.astro';
     let errors = new Set();
     let warnings = new Set();
     if (!recordStr) return { errors: ['No DMARC record found'], warnings: [] };
-
     const records = recordStr.split(' | ');
     records.forEach(record => {
       const lowerRec = record.trim().toLowerCase();
@@ -106,12 +96,15 @@ import Layout from '../layouts/Layout.astro';
         warnings.add('Policy is "none" but no "rua=" (reporting) is set. Record is inactive.');
       }
     });
-
     return { errors: Array.from(errors), warnings: Array.from(warnings) };
   }
 
   function enrichData(data) {
     return data.map(d => {
+      // Подстраховка, если в старой базе нет полей
+      d.product = d.product || 'TinyEmail';
+      d.account_type = d.account_type || 'Non-Major';
+
       if (d.spf_status === null || d.spf_status === 'null') {
         d.isPending = true;
         d.virtual_spf = 'PENDING';
@@ -127,17 +120,13 @@ import Layout from '../layouts/Layout.astro';
         if (d.spfData.errors.length > 0) d.virtual_spf = 'ERROR';
         else if (d.spfData.warnings.length > 0) d.virtual_spf = 'WARNING';
         else d.virtual_spf = 'OK';
-      } else {
-        d.virtual_spf = d.spf_status;
-      }
+      } else { d.virtual_spf = d.spf_status; }
 
       if (d.dmarc_status === 'OK') {
         if (d.dmarcData.errors.length > 0) d.virtual_dmarc = 'ERROR';
         else if (d.dmarcData.warnings.length > 0) d.virtual_dmarc = 'WARNING';
         else d.virtual_dmarc = 'OK';
-      } else {
-        d.virtual_dmarc = d.dmarc_status;
-      }
+      } else { d.virtual_dmarc = d.dmarc_status; }
 
       d.isCritical = d.virtual_spf !== 'OK' && d.virtual_spf !== 'WARNING' || d.virtual_dmarc !== 'OK' && d.virtual_dmarc !== 'WARNING';
       d.isConfig = !d.isCritical && (d.dkim1_status !== 'OK' || d.dkim2_status !== 'OK' || d.bounce_status !== 'OK');
@@ -158,33 +147,42 @@ import Layout from '../layouts/Layout.astro';
 
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('domainSearch') as HTMLInputElement)?.value.toLowerCase() || '';
-    let filtered = rawData.filter(d => d.domain.toLowerCase().includes(searchTerm));
+    
+    // Сначала фильтруем по текущему Продукту (Вкладке)
+    let productData = rawData.filter(d => d.product === currentProduct);
+    
+    let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
 
     if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
     else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
     else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
 
+    // Сортировка: Major аккаунты всегда выше в своей категории
     filtered.sort((a, b) => {
-      const getWeight = (d) => d.isCritical ? 100 : (d.isConfig ? 50 : (d.isPending ? -10 : 0));
+      const getWeight = (d) => {
+        let weight = d.isCritical ? 1000 : (d.isConfig ? 500 : (d.isPending ? -100 : 0));
+        if (d.account_type === 'Major') weight += 50; // Буст для Major
+        return weight;
+      };
       const diff = getWeight(b) - getWeight(a);
       return diff !== 0 ? diff : a.domain.localeCompare(b.domain);
     });
 
     renderTable(filtered);
-    renderSummary();
+    renderSummary(productData);
   }
 
-  function renderSummary() {
+  function renderSummary(productData) {
     const container = document.getElementById('dns-summary');
     if (!container) return;
-    const criticalCount = rawData.filter(d => d.isCritical && !d.isPending).length;
-    const configCount = rawData.filter(d => d.isConfig && !d.isPending).length;
-    const pendingCount = rawData.filter(d => d.isPending).length;
+    const criticalCount = productData.filter(d => d.isCritical && !d.isPending).length;
+    const configCount = productData.filter(d => d.isConfig && !d.isPending).length;
+    const pendingCount = productData.filter(d => d.isPending).length;
 
     container.innerHTML = `
       <div class="stat-card info ${currentFilter === 'all' ? 'active' : ''}" onclick="window.setDnsFilter('all')">
-        <span class="stat-label">Total Domains</span>
-        <span class="stat-value">${rawData.length}</span>
+        <span class="stat-label">${currentProduct} Domains</span>
+        <span class="stat-value">${productData.length}</span>
       </div>
       <div class="stat-card danger ${currentFilter === 'critical' ? 'active' : ''}" onclick="window.setDnsFilter('critical')">
         <span class="stat-label">Critical Issues</span>
@@ -201,6 +199,14 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
+  (window as any).setProductFilter = (prod, event) => {
+    currentProduct = prod;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    currentFilter = 'all'; // Сбрасываем фильтр статуса при смене продукта
+    applyFiltersAndRender();
+  };
+
   (window as any).setDnsFilter = (f) => { currentFilter = f; applyFiltersAndRender(); };
   (window as any).toggleRow = (domain) => { expandedDomain = (expandedDomain === domain) ? null : domain; applyFiltersAndRender(); };
 
@@ -209,10 +215,7 @@ import Layout from '../layouts/Layout.astro';
     const originalText = btn.innerHTML;
     btn.innerHTML = '✅ Copied!';
     btn.classList.add('copied');
-    setTimeout(() => {
-      btn.innerHTML = originalText;
-      btn.classList.remove('copied');
-    }, 2000);
+    setTimeout(() => { btn.innerHTML = originalText; btn.classList.remove('copied'); }, 2000);
   };
 
   (window as any).refreshDomain = async (domain, event) => {
@@ -220,32 +223,29 @@ import Layout from '../layouts/Layout.astro';
     const btn = event.currentTarget;
     btn.innerHTML = '⏳ Checking...';
     btn.classList.add('loading');
-
     try {
       await fetch(CHECK_URL + domain);
       const response = await fetch(API_URL);
       rawData = enrichData(await response.json());
       applyFiltersAndRender();
-    } catch (err) {
-      console.error(err);
-      btn.innerHTML = '❌ Error';
-      btn.classList.remove('loading');
-    }
+    } catch (err) { console.error(err); btn.innerHTML = '❌ Error'; btn.classList.remove('loading'); }
   };
 
   function renderTable(data) {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
     if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #1a202c;">No domains found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #1a202c;">No domains found for ${currentProduct}.</td></tr>`;
       return;
     }
     let html = '';
     data.forEach(row => {
       const isExpanded = expandedDomain === row.domain;
+      const majorBadge = row.account_type === 'Major' ? `<span class="major-badge" title="Major Account">⭐</span>` : '';
+      
       html += `
         <tr class="domain-row ${row.isCritical ? 'row-alert' : ''} ${isExpanded ? 'active-row' : ''}" onclick="window.toggleRow('${row.domain}')">
-          <td class="domain-text"><strong>${row.domain}</strong></td>
+          <td class="domain-text"><strong>${row.domain}</strong> ${majorBadge}</td>
           <td class="center">${getStatusBadge(row.virtual_spf)}</td>
           <td class="center">${getStatusBadge(row.virtual_dmarc)}</td>
           <td class="center">${getSmallIcon(row.dkim1_status)}</td>
@@ -265,6 +265,8 @@ import Layout from '../layouts/Layout.astro';
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                     Copy Domain
                   </button>
+                  <span class="info-tag product-tag">${row.product}</span>
+                  <span class="info-tag type-tag ${row.account_type === 'Major' ? 'major' : ''}">${row.account_type} Account</span>
                 </div>
                 <div class="details-grid">
                   <div class="detail-item ${row.virtual_spf === 'ERROR' || row.virtual_spf === 'DUPLICATE' ? 'error-block' : ''}">
@@ -342,6 +344,12 @@ import Layout from '../layouts/Layout.astro';
   .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
   .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
 
+  /* TABS STYLE */
+  .product-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
+  .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1.1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
+  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
+
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; user-select: none; }
   .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.15); border-color: #3182ce; }
@@ -360,10 +368,7 @@ import Layout from '../layouts/Layout.astro';
   .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
   .table-scroll { max-height: 70vh; overflow-y: auto; }
   
-  /* CRITICAL FIX: FORCING TABLE TEXT COLOR TO DARK */
-  #dnsTable, #dnsTable th, #dnsTable td, .domain-text strong, .date-col, .cname-list div, .detail-item label {
-    color: #1a202c !important;
-  }
+  #dnsTable, #dnsTable th, #dnsTable td, .domain-text strong, .date-col, .cname-list div, .detail-item label { color: #1a202c !important; }
   
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
   thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; }
@@ -377,22 +382,27 @@ import Layout from '../layouts/Layout.astro';
   .center { text-align: center; }
   .date-col { font-size: 0.8rem; font-weight: 500; }
 
+  .major-badge { font-size: 0.9rem; margin-left: 5px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1)); }
+
   .details-row td { padding: 0 !important; background-color: #f8fafc !important; border-bottom: 2px solid #cbd5e0; }
   .details-content { padding: 24px; animation: slideDown 0.2s ease-out; }
   
-  /* БЛОК КОПИРОВАНИЯ */
-  .domain-copy-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0; }
+  .domain-copy-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; }
   .large-domain { font-size: 1.5rem; font-weight: 900; color: #1a202c !important; letter-spacing: -0.5px; }
   .btn-copy { display: flex; align-items: center; gap: 6px; background: #edf2f7; border: 1px solid #cbd5e0; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; color: #4a5568 !important; cursor: pointer; transition: all 0.2s; }
   .btn-copy:hover { background: #e2e8f0; color: #2d3748 !important; }
   .btn-copy.copied { background: #c6f6d5; color: #22543d !important; border-color: #9ae6b4; }
+
+  .info-tag { padding: 4px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; border: 1px solid #cbd5e0; }
+  .product-tag { background: #edf2f7; color: #4a5568; margin-left: auto; }
+  .type-tag { background: #e2e8f0; color: #4a5568; }
+  .type-tag.major { background: #fefcbf; color: #975a16; border-color: #f6e05e; }
 
   .details-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 200px 140px; gap: 20px; align-items: start; }
   
   .detail-item label { display: block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; margin-bottom: 10px; }
   .records-container { display: flex; flex-direction: column; gap: 10px; }
   
-  /* FORCE RECORD TEXT COLOR */
   .record-text { background: #fff !important; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; font-family: monospace; font-size: 0.85rem; word-break: break-all; color: #2d3748 !important; line-height: 1.4; }
   .record-text.missing { color: #e53e3e !important; font-weight: bold; background: #fff5f5 !important; }
   .record-text.gray { color: #718096 !important; }
@@ -400,7 +410,6 @@ import Layout from '../layouts/Layout.astro';
   .is-duplicate .record-text { border-color: #feb2b2; border-left: 4px solid #e53e3e; }
   .dup-warn { display: inline-block; font-size: 10px; font-weight: 900; color: #e53e3e !important; margin-top: 4px; text-transform: uppercase; }
 
-  /* БЛОК ВАЛИДАЦИИ */
   .validation-box { margin-top: 8px; background: #fff !important; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.8rem; }
   .val-msg { margin-bottom: 4px; font-weight: 600; }
   .val-msg:last-child { margin-bottom: 0; }
