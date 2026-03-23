@@ -11,35 +11,6 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
-    <div class="card add-domain-section">
-      <h3>Add New Domain</h3>
-      <div class="add-domain-bar">
-        <div class="input-group">
-          <label>Domain</label>
-          <input type="text" id="add-domain-input" placeholder="example.com" class="input-field" />
-        </div>
-        <div class="input-group">
-          <label>Product</label>
-          <select id="add-product-select" class="input-field select-field">
-            <option value="TinyEmail">TinyEmail</option>
-            <option value="TinyAlbert">TinyAlbert</option>
-            <option value="TinyRelay">TinyRelay</option>
-          </select>
-        </div>
-        <div class="input-group">
-          <label>Account Type</label>
-          <select id="add-type-select" class="input-field select-field">
-            <option value="Non-Major">Non-Major</option>
-            <option value="Major">Major</option>
-          </select>
-        </div>
-        <button id="add-domain-btn" class="btn-add" onclick="window.addNewDomain()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          Add Domain
-        </button>
-      </div>
-    </div>
-
     <div class="product-tabs">
       <button class="tab-btn active" onclick="window.setProductFilter('TinyEmail', event)">TinyEmail</button>
       <button class="tab-btn" onclick="window.setProductFilter('TinyAlbert', event)">TinyAlbert</button>
@@ -50,7 +21,7 @@ import Layout from '../layouts/Layout.astro';
 
     <div class="table-actions-bar">
       <div class="left-actions">
-        <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field search-input" />
+        <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field" />
         <button id="btnMajorToggle" class="btn-major-filter" onclick="window.toggleMajor()">
           ⭐ Major Only
         </button>
@@ -86,149 +57,554 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <script>
-  // ... (Твой существующий JS код остается без изменений до функции addNewDomain) ...
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
-  const IMPORT_URL = 'https://checkdns.skitalets-od.workers.dev/api/import';
   const CHECK_URL = 'https://checkdns.skitalets-od.workers.dev/api/check-domain?domain=';
-  
   let rawData = [];
   let currentFilteredData = []; 
   let currentFilter = 'all'; 
   let currentProduct = 'TinyEmail';
   let showOnlyMajor = false; 
   let expandedDomain = null;
+
   let sortCol = 'default';
   let sortAsc = true;
 
-  // Функция добавления домена
-  (window as any).addNewDomain = async () => {
-    const input = document.getElementById('add-domain-input') as HTMLInputElement;
-    const prodSelect = document.getElementById('add-product-select') as HTMLSelectElement;
-    const typeSelect = document.getElementById('add-type-select') as HTMLSelectElement;
-    const btn = document.getElementById('add-domain-btn') as HTMLButtonElement;
-
-    const domain = input.value.trim().toLowerCase();
-    const product = prodSelect.value;
-    const accountType = typeSelect.value;
-
-    if (!domain || !domain.includes('.')) {
-      alert("Please enter a valid domain");
-      return;
+  function validateSPF(recordStr) {
+    let errors = new Set();
+    let warnings = new Set();
+    let lookups = 0;
+    if (!recordStr) return { errors: ['No SPF record found'], warnings: [], lookups };
+    const records = recordStr.split(' | ');
+    const lowerRecordStr = recordStr.toLowerCase();
+    
+    if (!lowerRecordStr.includes('include:_spf.tinyemail.com')) {
+      errors.add('Missing required include: _spf.tinyemail.com');
     }
+    records.forEach(record => {
+      const lowerRec = record.trim().toLowerCase();
+      if (!lowerRec.startsWith('v=spf1')) errors.add('Must start exactly with "v=spf1"');
+      if (lowerRec.includes('include=')) errors.add('Typo detected: use "include:" instead of "include="');
+      const terms = lowerRec.split(/\s+/);
+      let recordLookups = 0;
+      terms.forEach(t => {
+        if (t === 'a' || t.startsWith('a:') || t === 'mx' || t.startsWith('mx:') || t.startsWith('include:') || t === 'ptr' || t.startsWith('ptr:') || t.startsWith('exists:') || t.startsWith('redirect=')) {
+          recordLookups++;
+        }
+      });
+      lookups = Math.max(lookups, recordLookups);
+    });
+    if (lookups > 10) errors.add(`DNS Lookup Limit Exceeded: ${lookups}/10`);
+    else if (lookups >= 8) warnings.add(`Approaching DNS Lookup Limit: ${lookups}/10`);
+    return { errors: Array.from(errors), warnings: Array.from(warnings), lookups };
+  }
 
-    btn.disabled = true;
-    btn.innerHTML = '⏳ Processing...';
+  function validateDMARC(recordStr) {
+    let errors = new Set();
+    let warnings = new Set();
+    if (!recordStr) return { errors: ['No DMARC record found'], warnings: [] };
+    const records = recordStr.split(' | ');
+    records.forEach(record => {
+      const lowerRec = record.trim().toLowerCase();
+      if (!lowerRec.startsWith('v=dmarc1')) errors.add('Must start exactly with "v=DMARC1"');
+      if (!lowerRec.includes('p=')) errors.add('Missing policy tag (e.g., p=none, p=reject)');
+      if (lowerRec.includes('p=none') && !lowerRec.includes('rua=')) {
+        warnings.add('Policy is "none" but no "rua=" (reporting) is set. Record is inactive.');
+      }
+    });
+    return { errors: Array.from(errors), warnings: Array.from(warnings) };
+  }
 
+  function enrichData(data) {
+    return data.map(d => {
+      d.product = d.product || 'TinyEmail';
+      d.account_type = d.account_type || 'Non-Major';
+      
+      d.bounce_status = (d.bounce_status === 'OK' || d.bounce_status === 'Present') ? 'Present' : (d.bounce_status === 'MISSING' || !d.bounce_status ? 'None' : d.bounce_status);
+      d.warmup_em_status = d.warmup_em_status || 'None';
+      d.warmup_send_status = d.warmup_send_status || 'None';
+      
+      d.virtual_warmup = (d.warmup_em_status === 'Present and Match' && d.warmup_send_status === 'Present and Match') ? 'OK' : 'MISSING';
+
+      if (d.spf_status === null || d.spf_status === 'null') {
+        d.isPending = true;
+        d.virtual_spf = 'PENDING';
+        d.virtual_dmarc = 'PENDING';
+        return d;
+      }
+      
+      d.isPending = false;
+      d.spfData = validateSPF(d.spf_record);
+      d.dmarcData = validateDMARC(d.dmarc_record);
+
+      if (d.spf_status === 'OK') {
+        if (d.spfData.errors.length > 0) d.virtual_spf = 'ERROR';
+        else if (d.spfData.warnings.length > 0) d.virtual_spf = 'WARNING';
+        else d.virtual_spf = 'OK';
+      } else { d.virtual_spf = d.spf_status; }
+
+      if (d.dmarc_status === 'OK') {
+        if (d.dmarcData.errors.length > 0) d.virtual_dmarc = 'ERROR';
+        else if (d.dmarcData.warnings.length > 0) d.virtual_dmarc = 'WARNING';
+        else d.virtual_dmarc = 'OK';
+      } else { d.virtual_dmarc = d.dmarc_status; }
+
+      d.isCritical = d.virtual_spf !== 'OK' && d.virtual_spf !== 'WARNING' || d.virtual_dmarc !== 'OK' && d.virtual_dmarc !== 'WARNING';
+      d.isConfig = !d.isCritical && (d.dkim1_status !== 'OK' || d.dkim2_status !== 'OK' || d.bounce_status !== 'Present');
+
+      return d;
+    });
+  }
+
+  async function init() {
     try {
-      // 1. Отправляем в воркер на импорт
-      const importRes = await fetch(IMPORT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([{ domain, product, account_type: accountType }])
+      const response = await fetch(API_URL);
+      const json = await response.json();
+      rawData = enrichData(json);
+      applyFiltersAndRender();
+      document.getElementById('domainSearch')?.addEventListener('input', applyFiltersAndRender);
+    } catch (err) { console.error("DNS Fetch Error:", err); }
+  }
+
+  function updateSortIcons() {
+    try {
+      const cols = ['domain', 'virtual_spf', 'virtual_dmarc', 'dkim1_status', 'dkim2_status', 'bounce_status', 'virtual_warmup', 'last_checked'];
+      cols.forEach(c => {
+        const el = document.getElementById('sort-' + c);
+        const th = el?.parentElement;
+        if (el && th) {
+          if (sortCol === c) {
+            el.innerHTML = sortAsc ? '↑' : '↓';
+            el.style.opacity = '1';
+            th.classList.add('active-sort');
+          } else {
+            el.innerHTML = '↕';
+            el.style.opacity = '0.3';
+            th.classList.remove('active-sort');
+          }
+        }
+      });
+    } catch (e) { console.error("Sort Icon Update Error", e); }
+  }
+
+  function renderSummary(productData = []) {
+    try {
+      const container = document.getElementById('dns-summary');
+      if (!container) return;
+      
+      const criticalCount = productData.filter(d => d.isCritical && !d.isPending).length;
+      const configCount = productData.filter(d => d.isConfig && !d.isPending).length;
+      const pendingCount = productData.filter(d => d.isPending).length;
+
+      container.innerHTML = `
+        <div class="stat-card info ${currentFilter === 'all' ? 'active' : ''}" onclick="window.setDnsFilter('all')">
+          <span class="stat-label">${showOnlyMajor ? 'Major ' : ''}${currentProduct} Domains</span>
+          <span class="stat-value">${productData.length}</span>
+        </div>
+        <div class="stat-card danger ${currentFilter === 'critical' ? 'active' : ''}" onclick="window.setDnsFilter('critical')">
+          <span class="stat-label">Critical Issues</span>
+          <span class="stat-value">${criticalCount}</span>
+        </div>
+        <div class="stat-card warning ${currentFilter === 'config' ? 'active' : ''}" onclick="window.setDnsFilter('config')">
+          <span class="stat-label">Config Issues</span>
+          <span class="stat-value">${configCount}</span>
+        </div>
+        <div class="stat-card pending-card ${currentFilter === 'pending' ? 'active' : ''}" onclick="window.setDnsFilter('pending')">
+          <span class="stat-label">Pending Check</span>
+          <span class="stat-value">${pendingCount}</span>
+        </div>
+      `;
+    } catch (e) { console.error("Render Summary Error", e); }
+  }
+
+  function applyFiltersAndRender() {
+    try {
+      const searchEl = document.getElementById('domainSearch') as HTMLInputElement;
+      const searchTerm = searchEl ? searchEl.value.toLowerCase() : '';
+      
+      let productData = rawData.filter(d => d.product === currentProduct);
+      if (showOnlyMajor) productData = productData.filter(d => d.account_type === 'Major');
+      
+      // Рендерим карточки ПЕРЕД фильтрами и сортировками, чтобы они не пропали при ошибке ниже
+      renderSummary(productData);
+
+      let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
+
+      if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
+      else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
+      else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
+
+      filtered.sort((a, b) => {
+        if (sortCol === 'default') {
+          const getWeight = (d) => {
+            let weight = d.isCritical ? 1000 : (d.isConfig ? 500 : (d.isPending ? -100 : 0));
+            if (d.account_type === 'Major') weight += 50;
+            return weight;
+          };
+          const diff = getWeight(b) - getWeight(a);
+          return diff !== 0 ? diff : (a.domain || '').localeCompare(b.domain || '');
+        } else {
+          let valA = a[sortCol] || '';
+          let valB = b[sortCol] || '';
+
+          if (sortCol === 'last_checked') {
+            let timeA = new Date(valA).getTime() || 0;
+            let timeB = new Date(valB).getTime() || 0;
+            return sortAsc ? timeA - timeB : timeB - timeA;
+          }
+
+          let strA = valA.toString().toLowerCase();
+          let strB = valB.toString().toLowerCase();
+
+          if (strA < strB) return sortAsc ? -1 : 1;
+          if (strA > strB) return sortAsc ? 1 : -1;
+          return 0;
+        }
       });
 
-      if (!importRes.ok) throw new Error("Failed to import domain");
-
-      // 2. Сразу дергаем проверку DNS для этого домена
-      await fetch(CHECK_URL + domain);
-
-      // 3. Очищаем ввод и обновляем данные
-      input.value = '';
-      await init(); // Перезагружаем список
-      
-      // Переключаем таб на тот продукт, который добавили, чтобы увидеть результат
-      const tabToClick = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent === product);
-      if (tabToClick) (tabToClick as HTMLElement).click();
-
+      currentFilteredData = filtered; 
+      updateSortIcons();
+      renderTable(filtered);
     } catch (e) {
-      console.error(e);
-      alert("Error adding domain. Check console.");
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Domain`;
+      console.error("Filter/Render pipeline error", e);
     }
+  }
+
+  (window as any).sortBy = (col) => {
+    if (sortCol === col) {
+      sortAsc = !sortAsc;
+    } else {
+      sortCol = col;
+      sortAsc = true; 
+    }
+    applyFiltersAndRender();
   };
 
-  // ... (Остальной твой JS код init, validateSPF, renderTable и т.д. — копируй его из своего исходника) ...
-  // Убедись, что все функции из твоего старого скрипта перенесены сюда.
+  (window as any).setProductFilter = (prod, event) => {
+    currentProduct = prod;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    currentFilter = 'all'; 
+    sortCol = 'default'; 
+    applyFiltersAndRender();
+  };
+
+  (window as any).toggleMajor = () => {
+    showOnlyMajor = !showOnlyMajor;
+    const btn = document.getElementById('btnMajorToggle');
+    if (showOnlyMajor) btn?.classList.add('active');
+    else btn?.classList.remove('active');
+    applyFiltersAndRender();
+  };
+
+  (window as any).setDnsFilter = (f) => { currentFilter = f; applyFiltersAndRender(); };
+  (window as any).toggleRow = (domain) => { expandedDomain = (expandedDomain === domain) ? null : domain; applyFiltersAndRender(); };
+
+  (window as any).copyDomain = (domain, btn) => {
+    navigator.clipboard.writeText(domain);
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '✅ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.innerHTML = originalText; btn.classList.remove('copied'); }, 2000);
+  };
+
+  (window as any).refreshDomain = async (domain, event) => {
+    event.stopPropagation();
+    const btn = event.currentTarget;
+    btn.innerHTML = '⏳ Checking...';
+    btn.classList.add('loading');
+    try {
+      await fetch(CHECK_URL + domain);
+      const response = await fetch(API_URL);
+      rawData = enrichData(await response.json());
+      applyFiltersAndRender();
+    } catch (err) { console.error(err); btn.innerHTML = '❌ Error'; btn.classList.remove('loading'); }
+  };
+
+  (window as any).downloadCSV = () => {
+    if (currentFilteredData.length === 0) {
+      alert("No data available to export.");
+      return;
+    }
+    
+    const headers = ['Domain', 'Product', 'Account Type', 'SPF Status', 'DMARC Status', 'DKIM 1', 'DKIM 2', 'Bounce', 'Warmup EM', 'Warmup SEND', 'Last Checked'];
+    const rows = currentFilteredData.map(d => [
+      d.domain,
+      d.product,
+      d.account_type,
+      d.virtual_spf,
+      d.virtual_dmarc,
+      d.dkim1_status || 'MISSING',
+      d.dkim2_status || 'MISSING',
+      d.bounce_status || 'None',
+      d.warmup_em_status || 'None',
+      d.warmup_send_status || 'None',
+      d.last_checked || 'PENDING'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${currentProduct.toLowerCase()}_${showOnlyMajor ? 'major_' : ''}dns_report_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  function renderTable(data) {
+    const tbody = document.getElementById('tableBody');
+    if (!tbody) return;
+    if (data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 20px; color: #1a202c;">No domains found for ${currentProduct}${showOnlyMajor ? ' (Major Accounts)' : ''}.</td></tr>`;
+      return;
+    }
+    let html = '';
+    data.forEach(row => {
+      const isExpanded = expandedDomain === row.domain;
+      const majorBadge = row.account_type === 'Major' ? `<span class="major-badge" title="Major Account">⭐</span>` : '';
+      
+      let emClass = row.warmup_em_status === 'Present and Match' ? 'ok' : (row.warmup_em_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'));
+      let emMsg = row.warmup_em_status === 'Present and Match' ? 'emtny.tec-send3.com' : (row.warmup_em_status === 'Present Mismatch' ? 'Mismatch (Expected: emtny.tec-send3.com)' : (row.isPending ? 'PENDING' : 'Missing (Add CNAME -> emtny.tec-send3.com)'));
+
+      let sendClass = row.warmup_send_status === 'Present and Match' ? 'ok' : (row.warmup_send_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'));
+      let sendMsg = row.warmup_send_status === 'Present and Match' ? 'send.tec-send3.com' : (row.warmup_send_status === 'Present Mismatch' ? 'Mismatch (Expected: send.tec-send3.com)' : (row.isPending ? 'PENDING' : 'Missing (Add CNAME -> send.tec-send3.com)'));
+
+      html += `
+        <tr class="domain-row ${row.isCritical ? 'row-alert' : ''} ${isExpanded ? 'active-row' : ''}" onclick="window.toggleRow('${row.domain}')">
+          <td class="domain-text"><strong>${row.domain}</strong> ${majorBadge}</td>
+          <td class="center">${getStatusBadge(row.virtual_spf)}</td>
+          <td class="center">${getStatusBadge(row.virtual_dmarc)}</td>
+          <td class="center">${getSmallIcon(row.dkim1_status)}</td>
+          <td class="center">${getSmallIcon(row.dkim2_status)}</td>
+          <td class="center">${getSmallIcon(row.bounce_status)}</td>
+          <td class="center" style="font-weight:bold; color: #4a5568;">${row.virtual_warmup === 'OK' ? '✅' : '—'}</td>
+          <td class="date-col">${formatDate(row.last_checked)}</td>
+        </tr>
+      `;
+      if (isExpanded) {
+        html += `
+          <tr class="details-row">
+            <td colspan="8">
+              <div class="details-content">
+                <div class="domain-copy-bar">
+                  <span class="large-domain">${row.domain}</span>
+                  <button class="btn-copy" onclick="event.stopPropagation(); window.copyDomain('${row.domain}', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    Copy Domain
+                  </button>
+                  <span class="info-tag product-tag">${row.product}</span>
+                  <span class="info-tag type-tag ${row.account_type === 'Major' ? 'major' : ''}">${row.account_type} Account</span>
+                </div>
+                <div class="details-grid">
+                  <div class="detail-item ${row.virtual_spf === 'ERROR' || row.virtual_spf === 'DUPLICATE' ? 'error-block' : ''}">
+                    <label>SPF Records & Validation:</label>
+                    <div class="records-container">${renderValidatedRecords(row.spf_record, row.spf_status, row.spfData, 'SPF', row.isPending)}</div>
+                  </div>
+                  <div class="detail-item ${row.virtual_dmarc === 'ERROR' || row.virtual_dmarc === 'DUPLICATE' ? 'error-block' : ''}">
+                    <label>DMARC Records & Validation:</label>
+                    <div class="records-container">${renderValidatedRecords(row.dmarc_record, row.dmarc_status, row.dmarcData, 'DMARC', row.isPending)}</div>
+                  </div>
+                  <div class="detail-item">
+                    <label>DKIM Configuration:</label>
+                    <div class="cname-list">
+                      <div class="${row.dkim1_status === 'OK' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">tec1._domainkey: ${row.dkim1_status || 'PENDING'}</div>
+                      <div class="${row.dkim2_status === 'OK' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">tec2._domainkey: ${row.dkim2_status || 'PENDING'}</div>
+                    </div>
+                    
+                    <label style="margin-top: 15px;">Custom Return-Path:</label>
+                    <div class="cname-list">
+                      <div class="${row.bounce_status === 'Present' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">bounce: ${row.bounce_status || 'PENDING'}</div>
+                    </div>
+
+                    <label style="margin-top: 15px;">Tiny Warmup:</label>
+                    <div class="cname-list">
+                      <div class="${emClass}">em: ${emMsg}</div>
+                      <div class="${sendClass}">send: ${sendMsg}</div>
+                    </div>
+                  </div>
+                  <div class="refresh-action">
+                    <button class="btn-refresh" onclick="window.refreshDomain('${row.domain}', event)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.44l5.08 5.08"/></svg>
+                      Re-Check DNS
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    });
+    tbody.innerHTML = html;
+  }
+
+  function renderValidatedRecords(recordStr, rawStatus, valData, type, pending) {
+    if (pending) return `<div class="record-text gray">⏳ Waiting for initial check...</div>`;
+    if (!recordStr || recordStr === '') return `<div class="record-text missing">❌ NO ${type} RECORD FOUND</div>`;
+    
+    const records = recordStr.split(' | ');
+    let html = records.map(rec => `<div class="record-wrapper ${rawStatus === 'DUPLICATE' ? 'is-duplicate' : ''}"><div class="record-text">${rec}</div>${rawStatus === 'DUPLICATE' ? `<span class="dup-warn">⚠️ DUPLICATE! REMOVE THIS</span>` : ''}</div>`).join('');
+    
+    if (valData.errors.length > 0 || valData.warnings.length > 0 || valData.lookups !== undefined) {
+      html += `<div class="validation-box">`;
+      if (type === 'SPF') {
+        const lookupClass = valData.lookups > 10 ? 'err-badge' : (valData.lookups >= 8 ? 'warn-badge' : 'ok-badge');
+        html += `<span class="lookup-badge ${lookupClass}">DNS Lookups: ${valData.lookups}/10</span>`;
+      }
+      valData.errors.forEach(e => html += `<div class="val-msg val-err">❌ ${e}</div>`);
+      valData.warnings.forEach(w => html += `<div class="val-msg val-warn">⚠️ ${w}</div>`);
+      if (valData.errors.length === 0 && valData.warnings.length === 0 && (type !== 'SPF' || valData.lookups <= 10)) {
+         html += `<div class="val-msg val-ok">✅ Syntax & Configuration OK</div>`;
+      }
+      html += `</div>`;
+    }
+    return html;
+  }
+
+  function getStatusBadge(s) {
+    if (s === 'PENDING') return `<span class="badge badge-gray">...</span>`;
+    let cls = 'badge-green';
+    if (s === 'ERROR' || s === 'DUPLICATE' || s === 'MISSING') cls = 'badge-red';
+    if (s === 'WARNING') cls = 'badge-yellow';
+    return `<span class="badge ${cls}">${s}</span>`;
+  }
+
+  function getSmallIcon(s) { 
+    if (s === 'OK' || s === 'Present' || s === 'Present and Match') return '✅'; 
+    if (!s || s === 'null' || s === 'PENDING') return '⏳'; 
+    return '❌'; 
+  }
+  
+  function formatDate(d) { if (!d || d.includes('1970')) return '—'; return new Date(d).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+
+  init();
 </script>
 
 <style is:global>
-  /* Сохраняем все твои стили и добавляем новые для формы */
+  .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; }
+  .content-header { margin-bottom: 2rem; }
+  .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
+  .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
+
+  .product-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
+  .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1.1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
+  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; min-height: 100px; }
+  .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; user-select: none; }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.15); border-color: #3182ce; }
+  .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+
+  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; letter-spacing: 0.05em; }
+  .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; line-height: 1.1; margin-top: 5px; display: block; }
+  .stat-card.danger { border-left: 6px solid #e53e3e !important; }
+  .stat-card.warning { border-left: 6px solid #ed8936 !important; }
+  .stat-card.pending-card { border-left: 6px solid #a0aec0 !important; }
+  .stat-card.info { border-left: 6px solid #3182ce !important; }
+
+  .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
+  .left-actions { display: flex; align-items: center; gap: 12px; }
+  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 350px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
   
-  .add-domain-section {
-    margin-bottom: 2rem;
-    padding: 1.5rem 2rem !important;
-  }
+  .btn-major-filter { background: #fff; border: 2px solid #cbd5e0; padding: 10px 18px; border-radius: 10px; font-size: 0.95rem; font-weight: 700; color: #4a5568; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+  .btn-major-filter:hover { border-color: #a0aec0; background: #f7fafc; }
+  .btn-major-filter.active { border-color: #ecc94b; background: #fffff0; color: #975a16; box-shadow: 0 2px 4px rgba(214, 158, 46, 0.15); }
+
+  .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; border: none; background: #2d3748; color: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+  .btn-export:hover { background: #4a5568; transform: translateY(-1px); }
   
-  .add-domain-section h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
-    text-transform: uppercase;
-    color: #4a5568 !important;
-    letter-spacing: 0.5px;
-  }
+  .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  .table-scroll { max-height: 70vh; overflow-y: auto; }
+  
+  #dnsTable, #dnsTable th, #dnsTable td, .domain-text strong, .date-col, .cname-list div, .detail-item label { color: #1a202c !important; }
+  
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  
+  thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; }
+  .sortable { cursor: pointer; user-select: none; transition: background 0.2s; }
+  .sortable:hover { background: #edf2f7 !important; }
+  .active-sort { background: #e2e8f0 !important; }
+  .sort-icon { display: inline-block; margin-left: 4px; font-size: 0.8rem; font-weight: bold; min-width: 12px; opacity: 0.3; }
+  
+  .domain-row { cursor: pointer; transition: background 0.1s ease; }
+  .domain-row:hover { background-color: #f7fafc !important; }
+  .domain-row.active-row { background-color: #edf2f7 !important; border-left: 4px solid #3182ce; }
+  .row-alert { background-color: #fff5f5 !important; }
 
-  .add-domain-bar {
-    display: flex;
-    gap: 15px;
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
+  td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; }
+  .center { text-align: center; }
+  .date-col { font-size: 0.8rem; font-weight: 500; }
 
-  .input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;
-    min-width: 200px;
-  }
+  .major-badge { font-size: 0.9rem; margin-left: 5px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1)); }
 
-  .input-group label {
-    font-size: 0.75rem;
-    font-weight: 800;
-    color: #718096 !important;
-    text-transform: uppercase;
-  }
+  .details-row td { padding: 0 !important; background-color: #f8fafc !important; border-bottom: 2px solid #cbd5e0; }
+  .details-content { padding: 24px; animation: slideDown 0.2s ease-out; }
+  
+  .domain-copy-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; }
+  .large-domain { font-size: 1.5rem; font-weight: 900; color: #1a202c !important; letter-spacing: -0.5px; }
+  .btn-copy { display: flex; align-items: center; gap: 6px; background: #edf2f7; border: 1px solid #cbd5e0; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; color: #4a5568 !important; cursor: pointer; transition: all 0.2s; }
+  .btn-copy:hover { background: #e2e8f0; color: #2d3748 !important; }
+  .btn-copy.copied { background: #c6f6d5; color: #22543d !important; border-color: #9ae6b4; }
 
-  .select-field {
-    cursor: pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%234a5568'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    background-size: 16px;
-    appearance: none;
-    padding-right: 40px !important;
-  }
+  .info-tag { padding: 4px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; border: 1px solid #cbd5e0; }
+  .product-tag { background: #edf2f7; color: #4a5568; margin-left: auto; }
+  .type-tag { background: #e2e8f0; color: #4a5568; }
+  .type-tag.major { background: #fefcbf; color: #975a16; border-color: #f6e05e; }
 
-  .btn-add {
-    background: #10b981;
-    color: white;
-    border: none;
-    padding: 12px 24px;
-    border-radius: 10px;
-    font-weight: 700;
-    font-size: 0.95rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s;
-    height: 48px;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-  }
+  .details-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 200px 140px; gap: 20px; align-items: start; }
+  
+  .detail-item label { display: block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; margin-bottom: 10px; }
+  .records-container { display: flex; flex-direction: column; gap: 10px; }
+  
+  .record-text { background: #fff !important; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; font-family: monospace; font-size: 0.85rem; word-break: break-all; color: #2d3748 !important; line-height: 1.4; }
+  .record-text.missing { color: #e53e3e !important; font-weight: bold; background: #fff5f5 !important; }
+  .record-text.gray { color: #718096 !important; }
+  
+  .is-duplicate .record-text { border-color: #feb2b2; border-left: 4px solid #e53e3e; }
+  .dup-warn { display: inline-block; font-size: 10px; font-weight: 900; color: #e53e3e !important; margin-top: 4px; text-transform: uppercase; }
 
-  .btn-add:hover {
-    background: #059669;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3);
-  }
+  .validation-box { margin-top: 8px; background: #fff !important; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.8rem; }
+  .val-msg { margin-bottom: 4px; font-weight: 600; }
+  .val-msg:last-child { margin-bottom: 0; }
+  .val-err { color: #e53e3e !important; }
+  .val-warn { color: #d69e2e !important; }
+  .val-ok { color: #38a169 !important; }
+  
+  .lookup-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.7rem; margin-bottom: 8px; color: #fff !important; }
+  .ok-badge { background: #48bb78 !important; }
+  .warn-badge { background: #ecc94b !important; color: #744210 !important; }
+  .err-badge { background: #e53e3e !important; }
 
-  .btn-add:disabled {
-    background: #9ca3af;
-    cursor: not-allowed;
-    transform: none;
-  }
+  /* CNAME List Styles */
+  .cname-list div { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; padding-left: 20px; position: relative; }
+  .cname-list .ok::before { content: '✅'; position: absolute; left: 0; }
+  .cname-list .missing { color: #e53e3e !important; }
+  .cname-list .missing::before { content: '❌'; position: absolute; left: 0; }
+  .cname-list .error { color: #e53e3e !important; }
+  .cname-list .error::before { content: '❌'; position: absolute; left: 0; }
+  .cname-list .wait { color: #718096 !important; }
+  .cname-list .wait::before { content: '⏳'; position: absolute; left: 0; }
 
-  /* Твои старые стили .domains-wrapper, .stat-card и т.д. */
+  .refresh-action { display: flex; justify-content: flex-end; align-items: flex-start; }
+  .btn-refresh { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: #10b981 !important; color: white !important; border: none; padding: 15px; border-radius: 12px; font-weight: 800; font-size: 0.8rem; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); width: 100%; text-transform: uppercase; }
+  .btn-refresh svg { width: 28px; height: 28px; transition: transform 0.3s ease; }
+  .btn-refresh:hover { background: #059669 !important; transform: translateY(-2px); box-shadow: 0 6px 10px rgba(16, 185, 129, 0.3); }
+  .btn-refresh:hover svg { transform: rotate(45deg); }
+  .btn-refresh.loading { background: #9ca3af !important; cursor: not-allowed; transform: none; box-shadow: none; pointer-events: none; }
+
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+  .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; }
+  .badge-green { background: #c6f6d5 !important; color: #22543d !important; }
+  .badge-red { background: #fed7d7 !important; color: #822727 !important; }
+  .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
+  .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
 </style>
