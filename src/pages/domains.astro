@@ -116,11 +116,7 @@ import Layout from '../layouts/Layout.astro';
       const resImport = await fetch(IMPORT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([{ 
-          domain, 
-          product: prodSel.value, 
-          account_type: typeSel.value 
-        }])
+        body: JSON.stringify([{ domain, product: prodSel.value, account_type: typeSel.value }])
       });
 
       if (!resImport.ok) throw new Error("Import failed");
@@ -132,11 +128,7 @@ import Layout from '../layouts/Layout.astro';
         const tab = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent === prodSel.value);
         if (tab) (tab as HTMLElement).click();
       }
-
-    } catch (e) {
-      console.error(e);
-      alert("Error adding domain");
-    } finally {
+    } catch (e) { alert("Error adding domain"); } finally {
       btn.disabled = false;
       btn.innerText = 'Add & Verify';
     }
@@ -155,7 +147,6 @@ import Layout from '../layouts/Layout.astro';
     records.forEach(record => {
       const lowerRec = record.trim().toLowerCase();
       if (!lowerRec.startsWith('v=spf1')) errors.add('Must start exactly with "v=spf1"');
-      if (lowerRec.includes('include=')) errors.add('Typo detected: use "include:" instead of "include="');
       const terms = lowerRec.split(/\s+/);
       let recordLookups = 0;
       terms.forEach(t => {
@@ -316,6 +307,7 @@ import Layout from '../layouts/Layout.astro';
       const majorBadge = row.account_type === 'Major' ? `<span class="major-badge" title="Major Account">⭐</span>` : '';
       let emClass = row.warmup_em_status === 'Present and Match' ? 'ok' : (row.warmup_em_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'));
       let sendClass = row.warmup_send_status === 'Present and Match' ? 'ok' : (row.warmup_send_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'));
+      
       html += `
         <tr class="domain-row ${row.isCritical ? 'row-alert' : ''} ${isExpanded ? 'active-row' : ''}" onclick="window.toggleRow('${row.domain}')">
           <td class="domain-text"><strong>${row.domain}</strong> ${majorBadge}</td>
@@ -329,20 +321,47 @@ import Layout from '../layouts/Layout.astro';
         </tr>
       `;
       if (isExpanded) {
-        html += `<tr class="details-row"><td colspan="8"><div class="details-content">
-          <div class="domain-copy-bar"><span class="large-domain">${row.domain}</span><button class="btn-copy" onclick="event.stopPropagation(); window.copyDomain('${row.domain}', this)">Copy</button></div>
-          <div class="details-grid">
-            <div class="detail-item"><label>SPF:</label>${renderValidatedRecords(row.spf_record, row.spf_status, row.spfData, 'SPF', row.isPending)}</div>
-            <div class="detail-item"><label>DMARC:</label>${renderValidatedRecords(row.dmarc_record, row.dmarc_status, row.dmarcData, 'DMARC', row.isPending)}</div>
-            <div class="detail-item"><label>DKIM & Warmup:</label><div class="cname-list">
-              <div class="${row.dkim1_status === 'OK' ? 'ok' : 'missing'}">tec1: ${row.dkim1_status || '...'}</div>
-              <div class="${row.dkim2_status === 'OK' ? 'ok' : 'missing'}">tec2: ${row.dkim2_status || '...'}</div>
-              <div class="${emClass}">em: ${row.warmup_em_status}</div>
-              <div class="${sendClass}">send: ${row.warmup_send_status}</div>
-            </div></div>
-            <div class="refresh-action"><button class="btn-refresh" onclick="window.refreshDomain('${row.domain}', event)">Re-Check</button></div>
-          </div>
-        </div></td></tr>`;
+        html += `
+          <tr class="details-row">
+            <td colspan="8">
+              <div class="details-content">
+                <div class="domain-copy-bar">
+                  <span class="large-domain">${row.domain}</span>
+                  <button class="btn-copy" onclick="event.stopPropagation(); window.copyDomain('${row.domain}', this)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    Copy Domain
+                  </button>
+                  <span class="info-tag product-tag">${row.product}</span>
+                  <span class="info-tag type-tag ${row.account_type === 'Major' ? 'major' : ''}">${row.account_type} Account</span>
+                </div>
+                <div class="details-grid">
+                  <div class="detail-item">
+                    <label>SPF Records & Validation:</label>
+                    <div class="records-container">${renderValidatedRecords(row.spf_record, row.spf_status, row.spfData, 'SPF', row.isPending)}</div>
+                  </div>
+                  <div class="detail-item">
+                    <label>DMARC Records & Validation:</label>
+                    <div class="records-container">${renderValidatedRecords(row.dmarc_record, row.dmarc_status, row.dmarcData, 'DMARC', row.isPending)}</div>
+                  </div>
+                  <div class="detail-item">
+                    <label>DKIM & Warmup:</label>
+                    <div class="cname-list">
+                      <div class="${row.dkim1_status === 'OK' ? 'ok' : 'missing'}">tec1._domainkey: ${row.dkim1_status || '...'}</div>
+                      <div class="${row.dkim2_status === 'OK' ? 'ok' : 'missing'}">tec2._domainkey: ${row.dkim2_status || '...'}</div>
+                      <div class="${emClass}">em warmup: ${row.warmup_em_status}</div>
+                      <div class="${sendClass}">send warmup: ${row.warmup_send_status}</div>
+                    </div>
+                  </div>
+                  <div class="refresh-action">
+                    <button class="btn-refresh" onclick="window.refreshDomain('${row.domain}', event)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.44l5.08 5.08"/></svg>
+                      Re-Check DNS
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>`;
       }
     });
     tbody.innerHTML = html;
@@ -350,13 +369,13 @@ import Layout from '../layouts/Layout.astro';
 
   function renderValidatedRecords(recordStr, rawStatus, valData, type, pending) {
     if (pending) return `<div class="record-text gray">⏳ Pending...</div>`;
-    if (!recordStr) return `<div class="record-text missing">❌ NO RECORD</div>`;
+    if (!recordStr) return `<div class="record-text missing">❌ NO RECORD FOUND</div>`;
     const records = recordStr.split(' | ');
     let html = records.map(rec => `<div class="record-wrapper"><div class="record-text">${rec}</div></div>`).join('');
     html += `<div class="validation-box">`;
     valData.errors.forEach(e => html += `<div class="val-msg val-err">❌ ${e}</div>`);
     valData.warnings.forEach(w => html += `<div class="val-msg val-warn">⚠️ ${w}</div>`);
-    if (valData.errors.length === 0 && valData.warnings.length === 0) html += `<div class="val-msg val-ok">✅ Valid</div>`;
+    if (valData.errors.length === 0 && valData.warnings.length === 0) html += `<div class="val-msg val-ok">✅ Valid Syntax & Config</div>`;
     html += `</div>`; return html;
   }
 
@@ -378,88 +397,74 @@ import Layout from '../layouts/Layout.astro';
   .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
   .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
 
-  /* СТИЛИ ДЛЯ ФОРМЫ (Исправленные цвета) */
+  /* ФОРМА ДОБАВЛЕНИЯ */
   .add-domain-card { margin-bottom: 2rem; padding: 1.5rem !important; background: #ffffff !important; border: 1px solid #cbd5e0; border-radius: 12px; }
   .add-grid { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; }
-  
   .add-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 180px; }
-  .add-group label { 
-    font-size: 0.75rem; 
-    font-weight: 800; 
-    text-transform: uppercase; 
-    color: #4a5568 !important; /* Темный текст для подписей */
-    margin-bottom: 4px;
-    display: block;
-  }
+  .add-group label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; margin-bottom: 4px; display: block; }
+  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0 !important; border-radius: 10px; font-weight: 600; background: #ffffff !important; color: #1a202c !important; font-size: 0.95rem; }
+  .btn-add-domain { background: #10b981 !important; color: #fff !important; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; height: 48px; }
 
-  .input-field { 
-    padding: 12px 18px; 
-    border: 2px solid #cbd5e0 !important; 
-    border-radius: 10px; 
-    font-weight: 600; 
-    background: #ffffff !important; 
-    color: #1a202c !important; /* Четкий черный текст */
-    font-size: 0.95rem;
-    transition: border-color 0.2s;
-  }
-  .input-field:focus { outline: none; border-color: #3182ce !important; }
-
-  .select-custom { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em; padding-right: 2.5rem !important; }
-
-  .btn-add-domain { background: #10b981 !important; color: #fff !important; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; height: 48px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); }
-  .btn-add-domain:hover { background: #059669 !important; transform: translateY(-1px); }
-  .btn-add-domain:disabled { background: #9ca3af !important; cursor: not-allowed; }
-
-  /* ОСТАЛЬНЫЕ СТИЛИ */
+  /* ТАБЫ */
   .product-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
   .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1.1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
-  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
   .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
 
+  /* СУММАРНЫЕ КАРТОЧКИ */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; }
   .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; }
   .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; }
   .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; }
-  
-  .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
-  .search-input { width: 350px !important; }
 
-  /* ИСПРАВЛЕНИЕ КНОПКИ MAJOR ONLY */
-  .btn-major-filter { 
-    background: #ffffff !important; 
-    border: 2px solid #cbd5e0 !important; 
-    padding: 10px 18px; 
-    border-radius: 10px; 
-    font-weight: 700; 
-    color: #1a202c !important; /* ТЕМНЫЙ ТЕКСТ */
-    cursor: pointer; 
-    display: flex; 
-    align-items: center; 
-    gap: 6px; 
-    transition: 0.2s;
-  }
-  .btn-major-filter:hover { background: #f7fafc !important; border-color: #a0aec0 !important; }
-  .btn-major-filter.active { border-color: #ecc94b !important; background: #fffff0 !important; color: #975a16 !important; }
-
-  .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; background: #2d3748; color: #fff; font-weight: 700; cursor: pointer; }
-  
+  /* ТАБЛИЦА */
   .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
   .table-scroll { max-height: 70vh; overflow-y: auto; }
-  
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
   thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; color: #1a202c !important; }
-  
-  .sort-icon { margin-left: 4px; opacity: 0.3; }
+  td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; color: #1a202c !important; }
+  .center { text-align: center; }
+  .domain-row { cursor: pointer; }
   .domain-row:hover { background-color: #f7fafc !important; }
   .domain-row.active-row { background-color: #edf2f7 !important; border-left: 4px solid #3182ce; }
   .row-alert { background-color: #fff5f5 !important; }
-  td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; color: #1a202c !important; }
 
-  .details-content { padding: 24px; background: #f8fafc; }
-  .record-text { background: #fff !important; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e0; font-family: monospace; font-size: 0.8rem; color: #2d3748 !important; }
+  /* ДЕТАЛИ (ВОССТАНОВЛЕННЫЕ СТИЛИ) */
+  .details-row td { padding: 0 !important; background-color: #f8fafc !important; border-bottom: 2px solid #cbd5e0; }
+  .details-content { padding: 24px; animation: slideDown 0.2s ease-out; }
   
-  .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; }
+  .domain-copy-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0; }
+  .large-domain { font-size: 1.5rem; font-weight: 900; color: #1a202c !important; }
+  .btn-copy { display: flex; align-items: center; gap: 6px; background: #edf2f7; border: 1px solid #cbd5e0; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; color: #4a5568 !important; cursor: pointer; }
+
+  .info-tag { padding: 4px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; border: 1px solid #cbd5e0; }
+  .product-tag { background: #edf2f7; color: #4a5568; margin-left: auto; }
+  .type-tag { background: #e2e8f0; color: #4a5568; }
+  .type-tag.major { background: #fefcbf; color: #975a16; border-color: #f6e05e; }
+
+  .details-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 200px 160px; gap: 20px; align-items: start; }
+  .detail-item label { display: block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; margin-bottom: 10px; color: #4a5568 !important; }
+  .record-text { background: #fff !important; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; font-family: monospace; font-size: 0.85rem; color: #2d3748 !important; line-height: 1.4; }
+  
+  /* CNAME List */
+  .cname-list div { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; padding-left: 22px; position: relative; color: #1a202c !important; }
+  .cname-list .ok::before { content: '✅'; position: absolute; left: 0; }
+  .cname-list .missing::before { content: '❌'; position: absolute; left: 0; }
+  .cname-list .error::before { content: '❌'; position: absolute; left: 0; }
+  .cname-list .wait::before { content: '⏳'; position: absolute; left: 0; }
+
+  /* Refresh Button */
+  .btn-refresh { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: #10b981 !important; color: white !important; border: none; padding: 15px; border-radius: 12px; font-weight: 800; font-size: 0.8rem; cursor: pointer; width: 100%; text-transform: uppercase; }
+  .btn-refresh svg { width: 24px; height: 24px; }
+  .btn-refresh:hover { background: #059669 !important; transform: translateY(-2px); }
+
+  .validation-box { margin-top: 8px; background: #fff !important; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.8rem; }
+  .val-err { color: #e53e3e !important; }
+  .val-warn { color: #d69e2e !important; }
+  .val-ok { color: #38a169 !important; }
+
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+  
   .badge-green { background: #c6f6d5 !important; color: #22543d !important; }
   .badge-red { background: #fed7d7 !important; color: #822727 !important; }
   .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
