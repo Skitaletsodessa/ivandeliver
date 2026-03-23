@@ -53,7 +53,7 @@ import Layout from '../layouts/Layout.astro';
           <button onclick="document.getElementById('detailsModal').close()" class="close-btn">&times;</button>
         </div>
         <div class="modal-body" id="modalBody">
-          </div>
+        </div>
       </div>
     </dialog>
 
@@ -63,6 +63,7 @@ import Layout from '../layouts/Layout.astro';
 <script>
   const API_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   const SYNC_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/sync-now';
+  const DISCOVER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/discover';
   
   let rawData = [];
   let sortCol = 'domain';
@@ -196,7 +197,7 @@ import Layout from '../layouts/Layout.astro';
         if (r.reputation === 'MEDIUM') cls = 'badge-yellow';
         if (r.reputation === 'LOW' || r.reputation === 'BAD') cls = 'badge-red';
         
-        // Достаем количество IP (API может отдавать ipCount или просто массив sampleIps)
+        // Достаем количество IP
         const count = r.ipCount || r.numIps || (r.sampleIps ? r.sampleIps.length : 0);
         const countDisplay = count > 0 ? ` (${count})` : '';
         
@@ -214,12 +215,12 @@ import Layout from '../layouts/Layout.astro';
       if (!errors || errors.length === 0) return `<span class="text-gray">—</span>`;
       
       const tooltipTexts = errors.map(e => {
-        const ratio = e.errorRatio || 0; // Защита от NaN
+        const ratio = e.errorRatio || 0;
         const pct = (ratio * 100).toFixed(1) + '%';
         return `${e.errorType}: ${pct}`;
       }).join(' | ');
 
-      const mainRatio = errors[0].errorRatio || 0; // Защита от NaN
+      const mainRatio = errors[0].errorRatio || 0;
       const mainErrorRatio = (mainRatio * 100).toFixed(1);
       
       return `<span class="badge badge-red" title="${tooltipTexts}" style="cursor: help;">⚠️ ${mainErrorRatio}% Err</span>`;
@@ -312,13 +313,22 @@ import Layout from '../layouts/Layout.astro';
 
   (window as any).syncPostmaster = async (btn) => {
     const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Syncing...';
     btn.style.opacity = '0.7';
+    
     try {
+      // 1. Сначала обнаруживаем новые домены
+      btn.innerHTML = '⏳ Discovering...';
+      await fetch(DISCOVER_URL);
+      
+      // 2. Затем синхронизируем пачку старых
+      btn.innerHTML = '⏳ Syncing Batch...';
       await fetch(SYNC_URL);
-      await init(); // Refresh table
+      
+      // 3. Обновляем таблицу
+      await init(); 
     } catch (e) {
       alert("Sync failed. Check console.");
+      console.error(e);
     } finally {
       btn.innerHTML = originalText;
       btn.style.opacity = '1';
