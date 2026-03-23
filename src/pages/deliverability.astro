@@ -13,34 +13,34 @@ import Layout from '../layouts/Layout.astro';
     <div class="hub-grid">
       <a href="/domains" class="hub-card">
         <div class="card-icon dns">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
         </div>
         <div class="card-content">
           <h3>DNS Health Checker</h3>
           <p>Real-time validation of SPF, DMARC, DKIM, and Custom Return-Path for client domains.</p>
-          <span class="card-link">Launch Monitor →</span>
+          <span class="card-link dns">Launch Monitor →</span>
         </div>
       </a>
 
       <a href="/monitor" class="hub-card">
         <div class="card-icon snds">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
         </div>
         <div class="card-content">
           <h3>SNDS Monitor</h3>
           <p>Microsoft Smart Network Data Services tracking for IP reputation and blocklist status.</p>
-          <span class="card-link">Check IP Health →</span>
+          <span class="card-link snds">Check IP Health →</span>
         </div>
       </a>
 
       <a href="/postmaster" class="hub-card">
         <div class="card-icon gpt">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
         </div>
         <div class="card-content">
           <h3>GPT Monitor</h3>
           <p>Google Postmaster Tools API integration for Spam Rate, Domain and IP Reputation metrics.</p>
-          <span class="card-link">View Reputation →</span>
+          <span class="card-link gpt">View Reputation →</span>
         </div>
       </a>
     </div>
@@ -53,79 +53,85 @@ import Layout from '../layouts/Layout.astro';
 
 <style>
   .hub-container {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 4rem 2rem;
-    min-height: 90vh;
+    padding: 3rem 2rem 5rem 2rem;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    position: relative;
+    z-index: 10;
   }
 
   .hub-header {
     text-align: center;
-    margin-bottom: 4rem;
+    margin-bottom: 5rem;
   }
 
   .badge {
     display: inline-block;
     padding: 6px 16px;
-    background: rgba(49, 130, 206, 0.1);
-    color: #3182ce;
+    background: rgba(56, 161, 105, 0.1);
+    color: #48bb78;
     border-radius: 50px;
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-size: 0.8rem;
+    font-weight: 800;
     text-transform: uppercase;
-    margin-bottom: 1.5rem;
-    border: 1px solid rgba(49, 130, 206, 0.2);
+    margin-bottom: 1rem;
+    border: 1px solid rgba(56, 161, 105, 0.2);
+    letter-spacing: 0.5px;
   }
 
   .hub-header h1 {
-    font-size: 3.5rem;
+    font-size: 4rem;
     font-weight: 900;
-    color: #1a202c;
+    /* ВОТ ИСПРАВЛЕНИЕ: Яркий белый цвет */
+    color: #ffffff !important; 
     margin: 0 0 1.5rem 0;
-    letter-spacing: -1px;
+    letter-spacing: -1.5px;
     line-height: 1.1;
   }
 
   .hub-header p {
     font-size: 1.25rem;
-    color: #4a5568;
+    /* Яркий серый для описания */
+    color: #cbd5e1 !important; 
     max-width: 700px;
     margin: 0 auto;
     line-height: 1.6;
+    font-weight: 500;
   }
 
   .hub-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 2.5rem;
   }
 
   .hub-card {
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.98);
     border: 1px solid #e2e8f0;
-    border-radius: 20px;
-    padding: 2.5rem;
+    border-radius: 24px;
+    padding: 3rem;
     text-decoration: none;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 2rem;
     box-shadow: 0 4px 6px rgba(0,0,0,0.02);
   }
 
   .hub-card:hover {
-    transform: translateY(-8px);
+    transform: translateY(-10px) scale(1.01);
     border-color: #3182ce;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
   }
 
   .card-icon {
     width: 64px;
     height: 64px;
-    border-radius: 16px;
+    border-radius: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -137,35 +143,52 @@ import Layout from '../layouts/Layout.astro';
   .card-icon.gpt { background: linear-gradient(135deg, #805ad5, #6b46c1); }
 
   .card-content h3 {
-    font-size: 1.5rem;
+    font-size: 1.65rem;
     font-weight: 800;
-    color: #1a202c;
+    /* ТЕМНЫЙ цвет для заголовка на белой карточке */
+    color: #1a202c !important; 
     margin: 0 0 0.75rem 0;
+    letter-spacing: -0.5px;
   }
 
   .card-content p {
-    color: #718096;
-    line-height: 1.5;
-    margin: 0 0 1.5rem 0;
+    /* СЕРЫЙ цвет для текста на белой карточке */
+    color: #64748b !important; 
+    line-height: 1.6;
+    margin: 0 0 2rem 0;
     font-size: 1rem;
+    font-weight: 500;
   }
 
   .card-link {
     font-weight: 700;
-    color: #3182ce;
     font-size: 0.95rem;
-    transition: gap 0.2s;
+    transition: all 0.2s;
+  }
+  
+  .card-link.dns { color: #3182ce !important; }
+  .card-link.snds { color: #38a169 !important; }
+  .card-link.gpt { color: #805ad5 !important; }
+
+  .hub-card:hover .card-link {
+    gap: 8px;
+    text-decoration: underline;
   }
 
   .hub-footer {
-    margin-top: 5rem;
+    margin-top: 6rem;
     text-align: center;
-    color: #a0aec0;
+    /* Темный серый для футера на темном фоне */
+    color: #4a5568 !important; 
     font-size: 0.9rem;
+    font-weight: 500;
   }
 
   @media (max-width: 768px) {
-    .hub-header h1 { font-size: 2.5rem; }
-    .hub-container { padding: 2rem 1rem; }
+    .hub-header h1 { font-size: 2.8rem; }
+    .hub-container { padding: 3rem 1rem; }
+    .hub-header { margin-bottom: 3rem; }
+    .hub-grid { gap: 1.5rem; }
+    .hub-card { padding: 2rem; }
   }
 </style>
