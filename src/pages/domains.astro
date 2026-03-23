@@ -66,7 +66,6 @@ import Layout from '../layouts/Layout.astro';
   let showOnlyMajor = false; 
   let expandedDomain = null;
 
-  // Параметры сортировки
   let sortCol = 'default';
   let sortAsc = true;
 
@@ -167,80 +166,115 @@ import Layout from '../layouts/Layout.astro';
   }
 
   function updateSortIcons() {
-    const cols = ['domain', 'virtual_spf', 'virtual_dmarc', 'dkim1_status', 'dkim2_status', 'bounce_status', 'virtual_warmup', 'last_checked'];
-    cols.forEach(c => {
-      const el = document.getElementById('sort-' + c);
-      const th = el?.parentElement;
-      if (el && th) {
-        if (sortCol === c) {
-          el.innerHTML = sortAsc ? '↑' : '↓';
-          el.style.opacity = '1';
-          th.classList.add('active-sort');
-        } else {
-          el.innerHTML = '↕';
-          el.style.opacity = '0.3';
-          th.classList.remove('active-sort');
+    try {
+      const cols = ['domain', 'virtual_spf', 'virtual_dmarc', 'dkim1_status', 'dkim2_status', 'bounce_status', 'virtual_warmup', 'last_checked'];
+      cols.forEach(c => {
+        const el = document.getElementById('sort-' + c);
+        const th = el?.parentElement;
+        if (el && th) {
+          if (sortCol === c) {
+            el.innerHTML = sortAsc ? '↑' : '↓';
+            el.style.opacity = '1';
+            th.classList.add('active-sort');
+          } else {
+            el.innerHTML = '↕';
+            el.style.opacity = '0.3';
+            th.classList.remove('active-sort');
+          }
         }
-      }
-    });
+      });
+    } catch (e) { console.error("Sort Icon Update Error", e); }
+  }
+
+  function renderSummary(productData = []) {
+    try {
+      const container = document.getElementById('dns-summary');
+      if (!container) return;
+      
+      const criticalCount = productData.filter(d => d.isCritical && !d.isPending).length;
+      const configCount = productData.filter(d => d.isConfig && !d.isPending).length;
+      const pendingCount = productData.filter(d => d.isPending).length;
+
+      container.innerHTML = `
+        <div class="stat-card info ${currentFilter === 'all' ? 'active' : ''}" onclick="window.setDnsFilter('all')">
+          <span class="stat-label">${showOnlyMajor ? 'Major ' : ''}${currentProduct} Domains</span>
+          <span class="stat-value">${productData.length}</span>
+        </div>
+        <div class="stat-card danger ${currentFilter === 'critical' ? 'active' : ''}" onclick="window.setDnsFilter('critical')">
+          <span class="stat-label">Critical Issues</span>
+          <span class="stat-value">${criticalCount}</span>
+        </div>
+        <div class="stat-card warning ${currentFilter === 'config' ? 'active' : ''}" onclick="window.setDnsFilter('config')">
+          <span class="stat-label">Config Issues</span>
+          <span class="stat-value">${configCount}</span>
+        </div>
+        <div class="stat-card pending-card ${currentFilter === 'pending' ? 'active' : ''}" onclick="window.setDnsFilter('pending')">
+          <span class="stat-label">Pending Check</span>
+          <span class="stat-value">${pendingCount}</span>
+        </div>
+      `;
+    } catch (e) { console.error("Render Summary Error", e); }
   }
 
   function applyFiltersAndRender() {
-    const searchTerm = (document.getElementById('domainSearch') as HTMLInputElement)?.value.toLowerCase() || '';
-    
-    let productData = rawData.filter(d => d.product === currentProduct);
-    if (showOnlyMajor) productData = productData.filter(d => d.account_type === 'Major');
-    let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
+    try {
+      const searchEl = document.getElementById('domainSearch') as HTMLInputElement;
+      const searchTerm = searchEl ? searchEl.value.toLowerCase() : '';
+      
+      let productData = rawData.filter(d => d.product === currentProduct);
+      if (showOnlyMajor) productData = productData.filter(d => d.account_type === 'Major');
+      
+      // Рендерим карточки ПЕРЕД фильтрами и сортировками, чтобы они не пропали при ошибке ниже
+      renderSummary(productData);
 
-    if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
-    else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
-    else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
+      let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
 
-    // СОРТИРОВКА
-    filtered.sort((a, b) => {
-      if (sortCol === 'default') {
-        const getWeight = (d) => {
-          let weight = d.isCritical ? 1000 : (d.isConfig ? 500 : (d.isPending ? -100 : 0));
-          if (d.account_type === 'Major') weight += 50;
-          return weight;
-        };
-        const diff = getWeight(b) - getWeight(a);
-        return diff !== 0 ? diff : a.domain.localeCompare(b.domain);
-      } else {
-        let valA = a[sortCol];
-        let valB = b[sortCol];
+      if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
+      else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
+      else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
 
-        if (valA === null || valA === undefined) valA = '';
-        if (valB === null || valB === undefined) valB = '';
+      filtered.sort((a, b) => {
+        if (sortCol === 'default') {
+          const getWeight = (d) => {
+            let weight = d.isCritical ? 1000 : (d.isConfig ? 500 : (d.isPending ? -100 : 0));
+            if (d.account_type === 'Major') weight += 50;
+            return weight;
+          };
+          const diff = getWeight(b) - getWeight(a);
+          return diff !== 0 ? diff : (a.domain || '').localeCompare(b.domain || '');
+        } else {
+          let valA = a[sortCol] || '';
+          let valB = b[sortCol] || '';
 
-        if (sortCol === 'last_checked') {
-          let timeA = new Date(valA).getTime() || 0;
-          let timeB = new Date(valB).getTime() || 0;
-          return sortAsc ? timeA - timeB : timeB - timeA;
+          if (sortCol === 'last_checked') {
+            let timeA = new Date(valA).getTime() || 0;
+            let timeB = new Date(valB).getTime() || 0;
+            return sortAsc ? timeA - timeB : timeB - timeA;
+          }
+
+          let strA = valA.toString().toLowerCase();
+          let strB = valB.toString().toLowerCase();
+
+          if (strA < strB) return sortAsc ? -1 : 1;
+          if (strA > strB) return sortAsc ? 1 : -1;
+          return 0;
         }
+      });
 
-        let strA = valA.toString().toLowerCase();
-        let strB = valB.toString().toLowerCase();
-
-        if (strA < strB) return sortAsc ? -1 : 1;
-        if (strA > strB) return sortAsc ? 1 : -1;
-        return 0;
-      }
-    });
-
-    currentFilteredData = filtered; 
-    updateSortIcons();
-    renderTable(filtered);
-    renderSummary(productData);
+      currentFilteredData = filtered; 
+      updateSortIcons();
+      renderTable(filtered);
+    } catch (e) {
+      console.error("Filter/Render pipeline error", e);
+    }
   }
 
-  // Глобальные функции для окна
   (window as any).sortBy = (col) => {
     if (sortCol === col) {
-      sortAsc = !sortAsc; // Меняем направление
+      sortAsc = !sortAsc;
     } else {
       sortCol = col;
-      sortAsc = true; // Сбрасываем на Ascending для новой колонки
+      sortAsc = true; 
     }
     applyFiltersAndRender();
   };
@@ -250,7 +284,7 @@ import Layout from '../layouts/Layout.astro';
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     event.currentTarget.classList.add('active');
     currentFilter = 'all'; 
-    sortCol = 'default'; // Сбрасываем сортировку при смене вкладки
+    sortCol = 'default'; 
     applyFiltersAndRender();
   };
 
@@ -464,7 +498,7 @@ import Layout from '../layouts/Layout.astro';
   .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
   .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
 
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; min-height: 100px; }
   .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; user-select: none; }
   .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.15); border-color: #3182ce; }
   .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
@@ -476,7 +510,6 @@ import Layout from '../layouts/Layout.astro';
   .stat-card.pending-card { border-left: 6px solid #a0aec0 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
 
-  /* SEARCH & ACTIONS BAR */
   .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
   .left-actions { display: flex; align-items: center; gap: 12px; }
   .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 350px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
@@ -495,7 +528,6 @@ import Layout from '../layouts/Layout.astro';
   
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
   
-  /* SORTING STYLES */
   thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; }
   .sortable { cursor: pointer; user-select: none; transition: background 0.2s; }
   .sortable:hover { background: #edf2f7 !important; }
