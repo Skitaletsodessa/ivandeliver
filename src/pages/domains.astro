@@ -85,7 +85,7 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
-  const IMPORT_URL = 'https://checkdns.skitalets-od.workers.dev/api/import'; // URL для импорта
+  const IMPORT_URL = 'https://checkdns.skitalets-od.workers.dev/api/import';
   const CHECK_URL = 'https://checkdns.skitalets-od.workers.dev/api/check-domain?domain=';
   
   let rawData = [];
@@ -97,7 +97,6 @@ import Layout from '../layouts/Layout.astro';
   let sortCol = 'default';
   let sortAsc = true;
 
-  // --- НОВАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ ---
   (window as any).submitNewDomain = async () => {
     const input = document.getElementById('newDomainInput') as HTMLInputElement;
     const prodSel = document.getElementById('newProductSelect') as HTMLSelectElement;
@@ -114,7 +113,6 @@ import Layout from '../layouts/Layout.astro';
     btn.innerText = '⏳ Processing...';
 
     try {
-      // 1. Импорт
       const resImport = await fetch(IMPORT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,15 +124,10 @@ import Layout from '../layouts/Layout.astro';
       });
 
       if (!resImport.ok) throw new Error("Import failed");
-
-      // 2. Мгновенная проверка DNS
       await fetch(CHECK_URL + domain);
-
-      // 3. Сброс формы и обновление таблицы
       input.value = '';
       await init(); 
       
-      // Авто-переключение на нужный продукт, если добавили в другой
       if (currentProduct !== prodSel.value) {
         const tab = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent === prodSel.value);
         if (tab) (tab as HTMLElement).click();
@@ -149,7 +142,6 @@ import Layout from '../layouts/Layout.astro';
     }
   };
 
-  // --- ТВОЙ ОРИГИНАЛЬНЫЙ КОД БЕЗ ИЗМЕНЕНИЙ ---
   function validateSPF(recordStr) {
     let errors = new Set();
     let warnings = new Set();
@@ -381,55 +373,92 @@ import Layout from '../layouts/Layout.astro';
 </script>
 
 <style is:global>
-  /* ТВОИ СУЩЕСТВУЮЩИЕ СТИЛИ ПЕРЕНЕСЕНЫ ПОЛНОСТЬЮ */
   .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; }
   .content-header { margin-bottom: 2rem; }
   .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
   .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
 
-  /* НОВЫЕ СТИЛИ ДЛЯ ФОРМЫ (Изолированные) */
-  .add-domain-card { margin-bottom: 2rem; padding: 1.5rem !important; background: #ffffff !important; }
+  /* СТИЛИ ДЛЯ ФОРМЫ (Исправленные цвета) */
+  .add-domain-card { margin-bottom: 2rem; padding: 1.5rem !important; background: #ffffff !important; border: 1px solid #cbd5e0; border-radius: 12px; }
   .add-grid { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; }
-  .add-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 180px; }
-  .add-group label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; }
-  .select-custom { cursor: pointer; background-color: #fff !important; }
-  .btn-add-domain { background: #10b981 !important; color: #fff !important; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; height: 46px; }
+  
+  .add-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 180px; }
+  .add-group label { 
+    font-size: 0.75rem; 
+    font-weight: 800; 
+    text-transform: uppercase; 
+    color: #4a5568 !important; /* Темный текст для подписей */
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .input-field { 
+    padding: 12px 18px; 
+    border: 2px solid #cbd5e0 !important; 
+    border-radius: 10px; 
+    font-weight: 600; 
+    background: #ffffff !important; 
+    color: #1a202c !important; /* Четкий черный текст */
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+  }
+  .input-field:focus { outline: none; border-color: #3182ce !important; }
+
+  .select-custom { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em; padding-right: 2.5rem !important; }
+
+  .btn-add-domain { background: #10b981 !important; color: #fff !important; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; height: 48px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); }
   .btn-add-domain:hover { background: #059669 !important; transform: translateY(-1px); }
   .btn-add-domain:disabled { background: #9ca3af !important; cursor: not-allowed; }
 
-  /* ОСТАЛЬНЫЕ СТИЛИ ИЗ ТВОЕГО КОДА */
+  /* ОСТАЛЬНЫЕ СТИЛИ */
   .product-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
   .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1.1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
   .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
   .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; min-height: 100px; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; }
   .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; }
   .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; }
   .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; }
-  .stat-card.danger { border-left: 6px solid #e53e3e !important; }
-  .stat-card.warning { border-left: 6px solid #ed8936 !important; }
-  .stat-card.info { border-left: 6px solid #3182ce !important; }
+  
   .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
-  .left-actions { display: flex; align-items: center; gap: 12px; }
-  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; font-weight: 600; background: #fff !important; color: #000 !important; }
-  .btn-major-filter { background: #fff; border: 2px solid #cbd5e0; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; }
-  .btn-major-filter.active { border-color: #ecc94b; background: #fffff0; color: #975a16; }
+  .search-input { width: 350px !important; }
+
+  /* ИСПРАВЛЕНИЕ КНОПКИ MAJOR ONLY */
+  .btn-major-filter { 
+    background: #ffffff !important; 
+    border: 2px solid #cbd5e0 !important; 
+    padding: 10px 18px; 
+    border-radius: 10px; 
+    font-weight: 700; 
+    color: #1a202c !important; /* ТЕМНЫЙ ТЕКСТ */
+    cursor: pointer; 
+    display: flex; 
+    align-items: center; 
+    gap: 6px; 
+    transition: 0.2s;
+  }
+  .btn-major-filter:hover { background: #f7fafc !important; border-color: #a0aec0 !important; }
+  .btn-major-filter.active { border-color: #ecc94b !important; background: #fffff0 !important; color: #975a16 !important; }
+
   .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; background: #2d3748; color: #fff; font-weight: 700; cursor: pointer; }
+  
   .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
   .table-scroll { max-height: 70vh; overflow-y: auto; }
+  
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
-  thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; }
-  .sortable { cursor: pointer; }
+  thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; color: #1a202c !important; }
+  
   .sort-icon { margin-left: 4px; opacity: 0.3; }
-  .domain-row { cursor: pointer; }
   .domain-row:hover { background-color: #f7fafc !important; }
   .domain-row.active-row { background-color: #edf2f7 !important; border-left: 4px solid #3182ce; }
   .row-alert { background-color: #fff5f5 !important; }
   td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; color: #1a202c !important; }
-  .center { text-align: center; }
-  .details-content { padding: 24px; }
+
+  .details-content { padding: 24px; background: #f8fafc; }
   .record-text { background: #fff !important; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e0; font-family: monospace; font-size: 0.8rem; color: #2d3748 !important; }
+  
   .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 900; }
   .badge-green { background: #c6f6d5 !important; color: #22543d !important; }
   .badge-red { background: #fed7d7 !important; color: #822727 !important; }
