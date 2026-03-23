@@ -37,14 +37,14 @@ import Layout from '../layouts/Layout.astro';
         <table id="dnsTable">
           <thead>
             <tr>
-              <th>Domain</th>
-              <th class="center">SPF</th>
-              <th class="center">DMARC</th>
-              <th class="center">DKIM 1</th>
-              <th class="center">DKIM 2</th>
-              <th class="center">Bounce</th>
-              <th class="center">Warmup</th>
-              <th>Last Checked</th>
+              <th class="sortable" onclick="window.sortBy('domain')">Domain <span id="sort-domain" class="sort-icon"></span></th>
+              <th class="center sortable" onclick="window.sortBy('virtual_spf')">SPF <span id="sort-virtual_spf" class="sort-icon"></span></th>
+              <th class="center sortable" onclick="window.sortBy('virtual_dmarc')">DMARC <span id="sort-virtual_dmarc" class="sort-icon"></span></th>
+              <th class="center sortable" onclick="window.sortBy('dkim1_status')">DKIM 1 <span id="sort-dkim1_status" class="sort-icon"></span></th>
+              <th class="center sortable" onclick="window.sortBy('dkim2_status')">DKIM 2 <span id="sort-dkim2_status" class="sort-icon"></span></th>
+              <th class="center sortable" onclick="window.sortBy('bounce_status')">Bounce <span id="sort-bounce_status" class="sort-icon"></span></th>
+              <th class="center sortable" onclick="window.sortBy('virtual_warmup')">Warmup <span id="sort-virtual_warmup" class="sort-icon"></span></th>
+              <th class="sortable" onclick="window.sortBy('last_checked')">Last Checked <span id="sort-last_checked" class="sort-icon"></span></th>
             </tr>
           </thead>
           <tbody id="tableBody">
@@ -63,8 +63,12 @@ import Layout from '../layouts/Layout.astro';
   let currentFilteredData = []; 
   let currentFilter = 'all'; 
   let currentProduct = 'TinyEmail';
-  let showOnlyMajor = false; // Состояние фильтра Major
+  let showOnlyMajor = false; 
   let expandedDomain = null;
+
+  // Параметры сортировки
+  let sortCol = 'default';
+  let sortAsc = true;
 
   function validateSPF(recordStr) {
     let errors = new Set();
@@ -162,73 +166,91 @@ import Layout from '../layouts/Layout.astro';
     } catch (err) { console.error("DNS Fetch Error:", err); }
   }
 
+  function updateSortIcons() {
+    const cols = ['domain', 'virtual_spf', 'virtual_dmarc', 'dkim1_status', 'dkim2_status', 'bounce_status', 'virtual_warmup', 'last_checked'];
+    cols.forEach(c => {
+      const el = document.getElementById('sort-' + c);
+      const th = el?.parentElement;
+      if (el && th) {
+        if (sortCol === c) {
+          el.innerHTML = sortAsc ? '↑' : '↓';
+          el.style.opacity = '1';
+          th.classList.add('active-sort');
+        } else {
+          el.innerHTML = '↕';
+          el.style.opacity = '0.3';
+          th.classList.remove('active-sort');
+        }
+      }
+    });
+  }
+
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('domainSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
-    // 1. Фильтр по продукту
     let productData = rawData.filter(d => d.product === currentProduct);
-    
-    // 2. Фильтр по Major
-    if (showOnlyMajor) {
-      productData = productData.filter(d => d.account_type === 'Major');
-    }
-
-    // 3. Поиск
+    if (showOnlyMajor) productData = productData.filter(d => d.account_type === 'Major');
     let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
 
-    // 4. Фильтр по статусу (Summary Cards)
     if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
     else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
     else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
 
-    // Сортировка
+    // СОРТИРОВКА
     filtered.sort((a, b) => {
-      const getWeight = (d) => {
-        let weight = d.isCritical ? 1000 : (d.isConfig ? 500 : (d.isPending ? -100 : 0));
-        if (d.account_type === 'Major') weight += 50;
-        return weight;
-      };
-      const diff = getWeight(b) - getWeight(a);
-      return diff !== 0 ? diff : a.domain.localeCompare(b.domain);
+      if (sortCol === 'default') {
+        const getWeight = (d) => {
+          let weight = d.isCritical ? 1000 : (d.isConfig ? 500 : (d.isPending ? -100 : 0));
+          if (d.account_type === 'Major') weight += 50;
+          return weight;
+        };
+        const diff = getWeight(b) - getWeight(a);
+        return diff !== 0 ? diff : a.domain.localeCompare(b.domain);
+      } else {
+        let valA = a[sortCol];
+        let valB = b[sortCol];
+
+        if (valA === null || valA === undefined) valA = '';
+        if (valB === null || valB === undefined) valB = '';
+
+        if (sortCol === 'last_checked') {
+          let timeA = new Date(valA).getTime() || 0;
+          let timeB = new Date(valB).getTime() || 0;
+          return sortAsc ? timeA - timeB : timeB - timeA;
+        }
+
+        let strA = valA.toString().toLowerCase();
+        let strB = valB.toString().toLowerCase();
+
+        if (strA < strB) return sortAsc ? -1 : 1;
+        if (strA > strB) return sortAsc ? 1 : -1;
+        return 0;
+      }
     });
 
     currentFilteredData = filtered; 
+    updateSortIcons();
     renderTable(filtered);
-    renderSummary(productData); // Сводка теперь считает только то, что прошло Major-фильтр
+    renderSummary(productData);
   }
 
-  function renderSummary(productData) {
-    const container = document.getElementById('dns-summary');
-    if (!container) return;
-    const criticalCount = productData.filter(d => d.isCritical && !d.isPending).length;
-    const configCount = productData.filter(d => d.isConfig && !d.isPending).length;
-    const pendingCount = productData.filter(d => d.isPending).length;
-
-    container.innerHTML = `
-      <div class="stat-card info ${currentFilter === 'all' ? 'active' : ''}" onclick="window.setDnsFilter('all')">
-        <span class="stat-label">${showOnlyMajor ? 'Major ' : ''}${currentProduct} Domains</span>
-        <span class="stat-value">${productData.length}</span>
-      </div>
-      <div class="stat-card danger ${currentFilter === 'critical' ? 'active' : ''}" onclick="window.setDnsFilter('critical')">
-        <span class="stat-label">Critical Issues</span>
-        <span class="stat-value">${criticalCount}</span>
-      </div>
-      <div class="stat-card warning ${currentFilter === 'config' ? 'active' : ''}" onclick="window.setDnsFilter('config')">
-        <span class="stat-label">Config Issues</span>
-        <span class="stat-value">${configCount}</span>
-      </div>
-      <div class="stat-card pending-card ${currentFilter === 'pending' ? 'active' : ''}" onclick="window.setDnsFilter('pending')">
-        <span class="stat-label">Pending Check</span>
-        <span class="stat-value">${pendingCount}</span>
-      </div>
-    `;
-  }
+  // Глобальные функции для окна
+  (window as any).sortBy = (col) => {
+    if (sortCol === col) {
+      sortAsc = !sortAsc; // Меняем направление
+    } else {
+      sortCol = col;
+      sortAsc = true; // Сбрасываем на Ascending для новой колонки
+    }
+    applyFiltersAndRender();
+  };
 
   (window as any).setProductFilter = (prod, event) => {
     currentProduct = prod;
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     event.currentTarget.classList.add('active');
     currentFilter = 'all'; 
+    sortCol = 'default'; // Сбрасываем сортировку при смене вкладки
     applyFiltersAndRender();
   };
 
@@ -459,7 +481,6 @@ import Layout from '../layouts/Layout.astro';
   .left-actions { display: flex; align-items: center; gap: 12px; }
   .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; width: 350px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
   
-  /* Major Toggle Button */
   .btn-major-filter { background: #fff; border: 2px solid #cbd5e0; padding: 10px 18px; border-radius: 10px; font-size: 0.95rem; font-weight: 700; color: #4a5568; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
   .btn-major-filter:hover { border-color: #a0aec0; background: #f7fafc; }
   .btn-major-filter.active { border-color: #ecc94b; background: #fffff0; color: #975a16; box-shadow: 0 2px 4px rgba(214, 158, 46, 0.15); }
@@ -473,7 +494,13 @@ import Layout from '../layouts/Layout.astro';
   #dnsTable, #dnsTable th, #dnsTable td, .domain-text strong, .date-col, .cname-list div, .detail-item label { color: #1a202c !important; }
   
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  
+  /* SORTING STYLES */
   thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; }
+  .sortable { cursor: pointer; user-select: none; transition: background 0.2s; }
+  .sortable:hover { background: #edf2f7 !important; }
+  .active-sort { background: #e2e8f0 !important; }
+  .sort-icon { display: inline-block; margin-left: 4px; font-size: 0.8rem; font-weight: bold; min-width: 12px; opacity: 0.3; }
   
   .domain-row { cursor: pointer; transition: background 0.1s ease; }
   .domain-row:hover { background-color: #f7fafc !important; }
