@@ -45,15 +45,15 @@ const isToolPage = ['/domains', '/postmaster', '/monitor'].some(path => currentP
     {isToolPage && (
       <nav class="hub-floating-nav">
         <div class="nav-inner">
-          <a href="/deliverability" class="nav-back">
+          <a href="/deliverability" class="nav-back" title="Back to Hub">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
             <span>Hub</span>
           </a>
           <div class="nav-sep"></div>
           <div class="nav-links">
-            <a href="/domains" class={currentPath.includes('/domains') ? 'active' : ''}>DNS</a>
+            <a href="/domains" class={currentPath.includes('/domains') ? 'active' : ''}>DNS Monitor</a>
             <a href="/monitor" class={currentPath.includes('/monitor') ? 'active' : ''}>SNDS</a>
-            <a href="/postmaster" class={currentPath.includes('/postmaster') ? 'active' : ''}>Google</a>
+            <a href="/postmaster" class={currentPath.includes('/postmaster') ? 'active' : ''}>GPT</a>
           </div>
         </div>
       </nav>
@@ -83,46 +83,51 @@ const isToolPage = ['/domains', '/postmaster', '/monitor'].some(path => currentP
       body {
         margin: 0;
         padding: 0;
-        /* Паддинг только для главной, где есть Header */
         padding-top: 0; 
         font-family: system-ui, -apple-system, sans-serif;
         min-height: 100vh;
+        /* Убрали принудительный белый цвет текста для всего body */
       }
 
-      /* Если мы на главной, возвращаем отступ под Header */
+      /* Отступ только там, где есть основной хедер портфолио */
       body:has(header) { padding-top: 70px; }
 
-      /* СТИЛИ ПАРЯЩЕЙ НАВИГАЦИИ (Изолированы) */
+      /* СТИЛИ ПАРЯЩЕЙ НАВИГАЦИИ */
       .hub-floating-nav {
         position: fixed;
         top: 20px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 9999;
-        background: rgba(15, 23, 42, 0.8);
+        background: rgba(15, 23, 42, 0.85);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.15);
-        padding: 4px 8px;
+        padding: 5px 10px;
         border-radius: 100px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
       }
-      .nav-inner { display: flex; align-items: center; gap: 8px; }
+      .nav-inner { display: flex; align-items: center; gap: 10px; }
       .nav-back { 
         display: flex; align-items: center; gap: 6px; 
         color: #94a3b8 !important; text-decoration: none; 
-        font-size: 0.8rem; font-weight: 800; padding: 6px 12px;
+        font-size: 0.85rem; font-weight: 800; padding: 6px 14px;
+        border-radius: 100px;
+        transition: 0.2s;
       }
-      .nav-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.1); }
-      .nav-links { display: flex; gap: 2px; }
+      .nav-back:hover { color: #fff !important; background: rgba(255,255,255,0.1); }
+      .nav-sep { width: 1px; height: 18px; background: rgba(255,255,255,0.15); }
+      .nav-links { display: flex; gap: 4px; }
       .nav-links a {
         color: #94a3b8 !important; text-decoration: none;
-        font-size: 0.8rem; font-weight: 700; padding: 6px 14px; border-radius: 100px;
+        font-size: 0.85rem; font-weight: 700; padding: 7px 16px; border-radius: 100px;
+        transition: 0.2s;
+        white-space: nowrap;
       }
       .nav-links a.active { background: #3182ce; color: #fff !important; }
-      .nav-links a:hover:not(.active) { color: #fff !important; background: rgba(255,255,255,0.05); }
+      .nav-links a:hover:not(.active) { color: #fff !important; background: rgba(255,255,255,0.1); }
 
-      /* ФОН (Твой оригинальный) */
+      /* ФОНОВЫЕ ЭЛЕМЕНТЫ */
       .sky-background {
         position: fixed;
         inset: 0;
