@@ -5,7 +5,11 @@ import Layout from '../layouts/Layout.astro';
 <Layout title="Deliverability Hub | ivandeliver.email">
   <main class="hub-container">
     <header class="hub-header">
-      <div class="badge">Internal Tooling</div>
+      <div class="brand-line">
+        <img src="/images/tinyco-logo.png" alt="TinyCo Logo" class="tiny-logo" />
+        <span class="brand-text">Tiny Email Deliverability Tools</span>
+      </div>
+      
       <h1>Deliverability Monitoring Hub</h1>
       <p>A centralized suite of tools for monitoring DNS health, IP reputation, and Google Postmaster metrics.</p>
     </header>
@@ -69,24 +73,36 @@ import Layout from '../layouts/Layout.astro';
     margin-bottom: 5rem;
   }
 
-  .badge {
-    display: inline-block;
-    padding: 6px 16px;
-    background: rgba(56, 161, 105, 0.1);
-    color: #48bb78;
-    border-radius: 50px;
-    font-size: 0.8rem;
+  /* Брендовая линия */
+  .brand-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 2.5rem;
+    padding: 10px 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+  }
+
+  .tiny-logo {
+    height: 28px;
+    width: auto;
+    display: block;
+  }
+
+  .brand-text {
+    font-size: 0.95rem;
     font-weight: 800;
+    color: #48bb78; /* Фирменный зеленый TinyCo */
     text-transform: uppercase;
-    margin-bottom: 1rem;
-    border: 1px solid rgba(56, 161, 105, 0.2);
-    letter-spacing: 0.5px;
+    letter-spacing: 1.2px;
   }
 
   .hub-header h1 {
     font-size: 4rem;
     font-weight: 900;
-    /* ВОТ ИСПРАВЛЕНИЕ: Яркий белый цвет */
     color: #ffffff !important; 
     margin: 0 0 1.5rem 0;
     letter-spacing: -1.5px;
@@ -95,7 +111,6 @@ import Layout from '../layouts/Layout.astro';
 
   .hub-header p {
     font-size: 1.25rem;
-    /* Яркий серый для описания */
     color: #cbd5e1 !important; 
     max-width: 700px;
     margin: 0 auto;
@@ -145,14 +160,12 @@ import Layout from '../layouts/Layout.astro';
   .card-content h3 {
     font-size: 1.65rem;
     font-weight: 800;
-    /* ТЕМНЫЙ цвет для заголовка на белой карточке */
     color: #1a202c !important; 
     margin: 0 0 0.75rem 0;
     letter-spacing: -0.5px;
   }
 
   .card-content p {
-    /* СЕРЫЙ цвет для текста на белой карточке */
     color: #64748b !important; 
     line-height: 1.6;
     margin: 0 0 2rem 0;
@@ -178,7 +191,6 @@ import Layout from '../layouts/Layout.astro';
   .hub-footer {
     margin-top: 6rem;
     text-align: center;
-    /* Темный серый для футера на темном фоне */
     color: #4a5568 !important; 
     font-size: 0.9rem;
     font-weight: 500;
@@ -190,5 +202,6 @@ import Layout from '../layouts/Layout.astro';
     .hub-header { margin-bottom: 3rem; }
     .hub-grid { gap: 1.5rem; }
     .hub-card { padding: 2rem; }
+    .tiny-logo { height: 20px; }
   }
 </style>
