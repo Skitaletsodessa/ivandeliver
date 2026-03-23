@@ -68,6 +68,7 @@ import Layout from '../layouts/Layout.astro';
   let rawData = [];
   let sortCol = 'domain';
   let sortAsc = true;
+  let activeFilter = 'ALL'; // Глобальное состояние активного фильтра
 
   async function init() {
     try {
@@ -83,9 +84,23 @@ import Layout from '../layouts/Layout.astro';
 
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('domainSearch') as HTMLInputElement)?.value.toLowerCase() || '';
-    let filtered = rawData.filter(d => d.domain.toLowerCase().includes(searchTerm));
+    
+    // 1. Сначала фильтруем только по тексту поиска (это нужно для карточек, чтобы они показывали актуальные цифры по поиску)
+    let searchFiltered = rawData.filter(d => d.domain.toLowerCase().includes(searchTerm));
 
-    filtered.sort((a, b) => {
+    // 2. Затем применяем логику карточек-фильтров (это пойдет в таблицу)
+    let tableFiltered = searchFiltered.filter(d => {
+      if (activeFilter === 'ALL') return true;
+      if (activeFilter === 'HIGH') return d.domain_rep === 'HIGH';
+      if (activeFilter === 'MEDIUM') return d.domain_rep === 'MEDIUM';
+      if (activeFilter === 'LOW') return d.domain_rep === 'LOW';
+      if (activeFilter === 'BAD') return d.domain_rep === 'BAD';
+      if (activeFilter === 'SPAM') return (d.spam_rate || 0) >= 0.003;
+      return true;
+    });
+
+    // 3. Сортировка
+    tableFiltered.sort((a, b) => {
       let valA = a[sortCol] || '';
       let valB = b[sortCol] || '';
 
@@ -106,40 +121,70 @@ import Layout from '../layouts/Layout.astro';
       return 0;
     });
 
-    renderSummary(filtered);
-    renderTable(filtered);
+    renderSummary(searchFiltered); // Карточки строятся на основе searchFiltered, чтобы не пропадали при клике
+    renderTable(tableFiltered);    // А таблица строится с учетом кликнутой карточки
   }
 
   function renderSummary(data) {
     const container = document.getElementById('pm-summary');
     if (!container) return;
     
-    const badRepCount = data.filter(d => d.domain_rep === 'LOW' || d.domain_rep === 'BAD').length;
-    const highSpamCount = data.filter(d => (d.spam_rate || 0) >= 0.003).length; // >= 0.3%
+    // Считаем метрики для 6 карточек
     const total = data.length;
+    const highCount = data.filter(d => d.domain_rep === 'HIGH').length;
+    const medCount = data.filter(d => d.domain_rep === 'MEDIUM').length;
+    const lowCount = data.filter(d => d.domain_rep === 'LOW').length;
+    const badCount = data.filter(d => d.domain_rep === 'BAD').length;
+    const highSpamCount = data.filter(d => (d.spam_rate || 0) >= 0.003).length;
+
+    // Функция для подсветки активной карточки
+    const getActiveCls = (filterType) => activeFilter === filterType ? 'active-filter' : '';
 
     container.innerHTML = `
-      <div class="stat-card info">
-        <span class="stat-label">Tracked Domains</span>
+      <div class="stat-card filterable info ${getActiveCls('ALL')}" onclick="window.setCategoryFilter('ALL')">
+        <span class="stat-label">All Domains</span>
         <span class="stat-value">${total}</span>
       </div>
-      <div class="stat-card ${badRepCount > 0 ? 'danger' : 'success'}">
-        <span class="stat-label">Low/Bad Reputation</span>
-        <span class="stat-value">${badRepCount}</span>
+      <div class="stat-card filterable success ${getActiveCls('HIGH')}" onclick="window.setCategoryFilter('HIGH')">
+        <span class="stat-label">High Rep</span>
+        <span class="stat-value">${highCount}</span>
       </div>
-      <div class="stat-card ${highSpamCount > 0 ? 'danger' : 'success'}">
-        <span class="stat-label">Spam Rate > 0.3%</span>
+      <div class="stat-card filterable warning ${getActiveCls('MEDIUM')}" onclick="window.setCategoryFilter('MEDIUM')">
+        <span class="stat-label">Medium Rep</span>
+        <span class="stat-value">${medCount}</span>
+      </div>
+      <div class="stat-card filterable danger-light ${getActiveCls('LOW')}" onclick="window.setCategoryFilter('LOW')">
+        <span class="stat-label">Low Rep</span>
+        <span class="stat-value">${lowCount}</span>
+      </div>
+      <div class="stat-card filterable danger ${getActiveCls('BAD')}" onclick="window.setCategoryFilter('BAD')">
+        <span class="stat-label">Bad Rep</span>
+        <span class="stat-value">${badCount}</span>
+      </div>
+      <div class="stat-card filterable danger ${getActiveCls('SPAM')}" onclick="window.setCategoryFilter('SPAM')">
+        <span class="stat-label">Spam > 0.3%</span>
         <span class="stat-value">${highSpamCount}</span>
       </div>
     `;
   }
+
+  // Глобальная функция для смены фильтра по клику на карточку
+  (window as any).setCategoryFilter = (filterType) => {
+    // Если кликнули на уже активный фильтр, сбрасываем на ALL
+    if (activeFilter === filterType) {
+      activeFilter = 'ALL';
+    } else {
+      activeFilter = filterType;
+    }
+    applyFiltersAndRender();
+  };
 
   function renderTable(data) {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
     
     if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 20px;">No domains found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 20px;">No domains match the selected filter.</td></tr>`;
       return;
     }
 
@@ -197,7 +242,6 @@ import Layout from '../layouts/Layout.astro';
         if (r.reputation === 'MEDIUM') cls = 'badge-yellow';
         if (r.reputation === 'LOW' || r.reputation === 'BAD') cls = 'badge-red';
         
-        // Достаем количество IP
         const count = r.ipCount || r.numIps || (r.sampleIps ? r.sampleIps.length : 0);
         const countDisplay = count > 0 ? ` (${count})` : '';
         
@@ -241,7 +285,6 @@ import Layout from '../layouts/Layout.astro';
     return new Date(d).toLocaleDateString('cs-CZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
 
-  // Функция вызова модалки с детализацией
   (window as any).showDetails = (domain) => {
     const row = rawData.find(d => d.domain === domain);
     if (!row) return;
@@ -251,7 +294,6 @@ import Layout from '../layouts/Layout.astro';
     
     let html = '';
 
-    // Блок 1: Ошибки доставки
     html += `<div class="details-section"><h3>🛑 Delivery Errors</h3>`;
     try {
       const errors = JSON.parse(row.delivery_errors || '[]');
@@ -271,7 +313,6 @@ import Layout from '../layouts/Layout.astro';
     }
     html += `</div>`;
 
-    // Блок 2: Детализация IP адресов
     html += `<div class="details-section"><h3>🌐 IP Reputation (Sample IPs)</h3>`;
     try {
       const ipReps = JSON.parse(row.ip_rep_detailed || '[]');
@@ -316,15 +357,12 @@ import Layout from '../layouts/Layout.astro';
     btn.style.opacity = '0.7';
     
     try {
-      // 1. Сначала обнаруживаем новые домены
       btn.innerHTML = '⏳ Discovering...';
       await fetch(DISCOVER_URL);
       
-      // 2. Затем синхронизируем пачку старых
       btn.innerHTML = '⏳ Syncing Batch...';
       await fetch(SYNC_URL);
       
-      // 3. Обновляем таблицу
       await init(); 
     } catch (e) {
       alert("Sync failed. Check console.");
@@ -348,9 +386,33 @@ import Layout from '../layouts/Layout.astro';
   .btn-primary { display: flex; align-items: center; gap: 8px; background: #3182ce; color: #fff; padding: 12px 24px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
   .btn-primary:hover { background: #2b6cb0; }
   
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  /* Обновленная сетка под 6 карточек */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  
+  /* Стили для кликабельных карточек */
+  .stat-card { 
+    background: #fff !important; 
+    padding: 1.5rem; 
+    border-radius: 12px; 
+    border: 1px solid #cbd5e0; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+    transition: all 0.2s ease;
+  }
+  .stat-card.filterable { cursor: pointer; }
+  .stat-card.filterable:hover { transform: translateY(-3px); box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+  
+  /* Подсветка активного фильтра */
+  .stat-card.active-filter { 
+    background: #ebf8ff !important; 
+    border: 2px solid #3182ce; 
+    transform: translateY(-2px); 
+    box-shadow: 0 4px 10px rgba(49,130,206,0.2); 
+  }
+  
+  /* Цветовые полоски слева */
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
+  .stat-card.danger-light { border-left: 6px solid #ed8936 !important; } /* Оранжевый для Low */
+  .stat-card.warning { border-left: 6px solid #ecc94b !important; } /* Желтый для Medium */
   .stat-card.success { border-left: 6px solid #48bb78 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
   
