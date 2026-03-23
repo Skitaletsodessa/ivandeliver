@@ -6,6 +6,16 @@ interface Props {
 }
 
 const { title } = Astro.props;
+const currentPath = Astro.url.pathname;
+
+// Определяем, нужно ли показывать Header портфолио (только на главной)
+const isMainPage = currentPath === '/' || currentPath === '';
+
+// Определяем, нужно ли показывать Tool-навигацию (для всех страниц инструментов)
+const isToolPage = ['/domains', '/postmaster', '/monitor'].some(path => currentPath.includes(path));
+
+// На лендинге /deliverability не показываем ни Header, ни Tool-нав, так как там свои карточки
+const isHubLanding = currentPath.includes('/deliverability');
 ---
 
 <!doctype html>
@@ -50,7 +60,24 @@ const { title } = Astro.props;
     <meta property="twitter:image" content="https://ivandeliver.email/og-image.jpg" />
   </head>
   <body>
-    <Header />
+    {isMainPage && <Header />}
+
+    {isToolPage && (
+      <nav class="hub-nav">
+        <div class="nav-inner">
+          <a href="/deliverability" class="nav-back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+            <span>Hub</span>
+          </a>
+          <div class="nav-separator"></div>
+          <div class="nav-links">
+            <a href="/domains" class={currentPath.includes('/domains') ? 'active' : ''}>DNS Check</a>
+            <a href="/monitor" class={currentPath.includes('/monitor') ? 'active' : ''}>SNDS</a>
+            <a href="/postmaster" class={currentPath.includes('/postmaster') ? 'active' : ''}>Postmaster</a>
+          </div>
+        </div>
+      </nav>
+    )}
     
     <slot />
 
@@ -72,25 +99,91 @@ const { title } = Astro.props;
 
       html {
         scroll-behavior: smooth;
-        scroll-padding-top: 100px; /* Фикс нахлеста хедера */
+        scroll-padding-top: 100px;
       }
 
       body {
         margin: 0;
         padding: 0;
-        padding-top: 70px;
+        /* Убираем лишний паддинг, если это лендинг хаба */
+        padding-top: var(--body-pt, 70px);
         color: #ffffff !important; 
         font-family: system-ui, sans-serif;
       }
 
-      /* Исправление контраста для PageSpeed */
-      h1, h2, h3, h4, b {
-        color: #ffffff !important;
+      /* Специальная навигация для инструментов */
+      .hub-nav {
+        position: fixed;
+        top: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 6px 10px;
+        border-radius: 50px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
       }
 
-      p, span {
-        color: #cbd5e1 !important; /* Более яркий серый для доступности */
+      .nav-inner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
       }
+
+      .nav-back {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #94a3b8 !important;
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 700;
+        padding: 6px 12px;
+        border-radius: 50px;
+        transition: all 0.2s;
+      }
+
+      .nav-back:hover {
+        color: #fff !important;
+        background: rgba(255,255,255,0.05);
+      }
+
+      .nav-separator {
+        width: 1px;
+        height: 20px;
+        background: rgba(255,255,255,0.1);
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 4px;
+      }
+
+      .nav-links a {
+        color: #94a3b8 !important;
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 6px 14px;
+        border-radius: 50px;
+        transition: all 0.2s;
+      }
+
+      .nav-links a:hover {
+        color: #fff !important;
+      }
+
+      .nav-links a.active {
+        background: #3182ce;
+        color: #fff !important;
+      }
+
+      /* Глобальные правки контраста */
+      h1, h2, h3, h4, b { color: #ffffff !important; }
+      p, span { color: #cbd5e1 !important; }
 
       .sky-background {
         position: fixed;
@@ -133,7 +226,6 @@ const { title } = Astro.props;
       .p7 { animation: fly 16s linear infinite; top: 40%; left: 70%; animation-delay: 4s; }
       .p8 { animation: fly 30s linear infinite; top: 90%; left: 50%; animation-delay: 6s; }
 
-      /* Скрытие заголовков для роботов */
       .visually-hidden {
         position: absolute;
         width: 1px;
