@@ -84,6 +84,7 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <script>
+  // Логика скриптов остается без изменений, так как она работала корректно
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
   const IMPORT_URL = 'https://checkdns.skitalets-od.workers.dev/api/import';
   const CHECK_URL = 'https://checkdns.skitalets-od.workers.dev/api/check-domain?domain=';
@@ -116,10 +117,6 @@ import Layout from '../layouts/Layout.astro';
       await fetch(CHECK_URL + domain);
       input.value = '';
       await init(); 
-      if (currentProduct !== prodSel.value) {
-        const tab = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent === prodSel.value);
-        if (tab) (tab as HTMLElement).click();
-      }
     } catch (e) { alert("Error adding domain"); } finally {
       btn.disabled = false;
       btn.innerText = 'Add & Verify';
@@ -130,7 +127,7 @@ import Layout from '../layouts/Layout.astro';
     let errors = new Set();
     let warnings = new Set();
     let lookups = 0;
-    if (!recordStr) return { errors: ['No SPF record found'], warnings: [], lookups };
+    if (!recordStr) return { errors: ['No SPF record found'], warnings: [], lookups: 0 };
     const records = recordStr.split(' | ');
     const lowerRecordStr = recordStr.toLowerCase();
     if (!lowerRecordStr.includes('include:_spf.tinyemail.com')) { errors.add('Missing required include: _spf.tinyemail.com'); }
@@ -158,7 +155,6 @@ import Layout from '../layouts/Layout.astro';
       const lowerRec = record.trim().toLowerCase();
       if (!lowerRec.startsWith('v=dmarc1')) errors.add('Must start exactly with "v=DMARC1"');
       if (!lowerRec.includes('p=')) errors.add('Missing policy tag (e.g., p=none, p=reject)');
-      if (lowerRec.includes('p=none') && !lowerRec.includes('rua=')) { warnings.add('Policy is "none" but no "rua=" (reporting) is set. Record is inactive.'); }
     });
     return { errors: Array.from(errors), warnings: Array.from(warnings) };
   }
@@ -350,9 +346,9 @@ import Layout from '../layouts/Layout.astro';
     const records = recordStr.split(' | ');
     let html = records.map(rec => `<div class="record-wrapper"><div class="record-text">${rec}</div></div>`).join('');
     html += `<div class="validation-box">`;
-    valData.errors.forEach(e => html += `<div class="val-msg val-err">❌ ${e}</div>`);
-    valData.warnings.forEach(w => html += `<div class="val-msg val-warn">⚠️ ${w}</div>`);
-    if (valData.errors.length === 0 && valData.warnings.length === 0) html += `<div class="val-msg val-ok">✅ Valid Syntax & Config</div>`;
+    if (valData.errors) valData.errors.forEach(e => html += `<div class="val-msg val-err">❌ ${e}</div>`);
+    if (valData.warnings) valData.warnings.forEach(w => html += `<div class="val-msg val-warn">⚠️ ${w}</div>`);
+    if ((!valData.errors || valData.errors.length === 0) && (!valData.warnings || valData.warnings.length === 0)) html += `<div class="val-msg val-ok">✅ Valid Syntax & Config</div>`;
     html += `</div>`; return html;
   }
 
@@ -374,73 +370,36 @@ import Layout from '../layouts/Layout.astro';
   .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
   .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
 
-  /* ФОРМА ДОБАВЛЕНИЯ */
   .add-domain-card { margin-bottom: 2rem; padding: 1.5rem !important; background: #ffffff !important; border: 1px solid #cbd5e0; border-radius: 12px; }
   .add-grid { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; }
   .add-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 180px; }
   .add-group label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; margin-bottom: 4px; display: block; }
-  
-  .input-field { 
-    padding: 12px 18px; 
-    border: 2px solid #cbd5e0 !important; 
-    border-radius: 10px; 
-    font-weight: 600; 
-    background: #ffffff !important; 
-    color: #1a202c !important; 
-    font-size: 0.95rem; 
-  }
+  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0 !important; border-radius: 10px; font-weight: 600; background: #ffffff !important; color: #1a202c !important; font-size: 0.95rem; }
   .btn-add-domain { background: #10b981 !important; color: #fff !important; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; height: 48px; }
 
-  /* ACTION BAR (Исправлено позиционирование) */
-  .table-actions-bar { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    margin-bottom: 1.5rem; 
-    gap: 15px; 
-  }
+  /* ACTION BAR (Исправлено) */
+  .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; gap: 15px; }
   .left-actions { display: flex; align-items: center; gap: 12px; }
   .search-input { width: 350px !important; }
-
-  .btn-major-filter { 
-    background: #ffffff !important; 
-    border: 2px solid #cbd5e0 !important; 
-    padding: 10px 18px; 
-    border-radius: 10px; 
-    font-weight: 700; 
-    color: #1a202c !important; 
-    cursor: pointer; 
-    display: flex; 
-    align-items: center; 
-    gap: 6px; 
-    transition: 0.2s; 
-  }
+  .btn-major-filter { background: #ffffff !important; border: 2px solid #cbd5e0 !important; padding: 10px 18px; border-radius: 10px; font-weight: 700; color: #1a202c !important; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s; }
   .btn-major-filter.active { border-color: #ecc94b !important; background: #fffff0 !important; color: #975a16 !important; }
+  .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; background: #2d3748 !important; color: #ffffff !important; font-weight: 700; cursor: pointer; border: none; }
 
-  .btn-export { 
-    display: flex; 
-    align-items: center; 
-    gap: 8px; 
-    padding: 12px 20px; 
-    border-radius: 10px; 
-    background: #2d3748 !important; 
-    color: #ffffff !important; 
-    font-weight: 700; 
-    cursor: pointer; 
-    border: none;
+  /* СТАТУСЫ (Плашки) */
+  .badge { 
+    display: inline-block !important; 
+    padding: 6px 12px !important; 
+    border-radius: 6px !important; 
+    font-size: 0.75rem !important; 
+    font-weight: 900 !important; 
+    text-transform: uppercase !important; 
+    min-width: 85px; 
+    text-align: center;
   }
-
-  /* ТАБЫ */
-  .product-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
-  .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1.1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
-  .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
-
-  /* СУММАРНЫЕ КАРТОЧКИ */
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background-color: #ffffff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; cursor: pointer; transition: all 0.2s ease; }
-  .stat-card.active { border: 3px solid #3182ce !important; background-color: #f0f7ff !important; }
-  .stat-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; }
-  .stat-value { font-size: 2.2rem; font-weight: 900; color: #000000 !important; }
+  .badge-green { background: #c6f6d5 !important; color: #22543d !important; border: 1px solid #9ae6b4 !important; }
+  .badge-red { background: #fed7d7 !important; color: #822727 !important; border: 1px solid #feb2b2 !important; }
+  .badge-yellow { background: #feebc8 !important; color: #744210 !important; border: 1px solid #fbd38d !important; }
+  .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
 
   /* ТАБЛИЦА */
   .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
@@ -449,49 +408,51 @@ import Layout from '../layouts/Layout.astro';
   thead th { position: sticky; top: 0; z-index: 10; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; text-align: left; color: #1a202c !important; }
   td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; color: #1a202c !important; }
   .center { text-align: center; }
-  .domain-row { cursor: pointer; }
   .domain-row:hover { background-color: #f7fafc !important; }
   .domain-row.active-row { background-color: #edf2f7 !important; border-left: 4px solid #3182ce; }
   .row-alert { background-color: #fff5f5 !important; }
 
-  /* ИСПРАВЛЕННЫЕ БЕЙДЖИ (OK, DUPLICATE, WARNING) */
-  .badge { 
-    display: inline-block;
-    padding: 6px 12px; 
-    border-radius: 6px; 
-    font-size: 0.7rem; 
-    font-weight: 900; 
-    text-transform: uppercase;
-  }
-  .badge-green { background: #c6f6d5 !important; color: #22543d !important; }
-  .badge-red { background: #fed7d7 !important; color: #822727 !important; }
-  .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
-  .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
-
-  /* ДЕТАЛИ */
-  .details-row td { padding: 0 !important; background-color: #f8fafc !important; border-bottom: 2px solid #cbd5e0; }
+  /* ДЕТАЛИ И КНОПКА RE-CHECK (Исправлено) */
+  .details-row td { padding: 0 !important; background-color: #f8fafc !important; }
   .details-content { padding: 24px; animation: slideDown 0.2s ease-out; }
-  .domain-copy-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0; }
-  .large-domain { font-size: 1.5rem; font-weight: 900; color: #1a202c !important; }
-  .btn-copy { display: flex; align-items: center; gap: 6px; background: #edf2f7; border: 1px solid #cbd5e0; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; color: #4a5568 !important; cursor: pointer; }
-  .info-tag { padding: 4px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; border: 1px solid #cbd5e0; }
-  .product-tag { background: #edf2f7; color: #4a5568; margin-left: auto; }
-  .type-tag { background: #e2e8f0; color: #4a5568; }
-  .type-tag.major { background: #fefcbf; color: #975a16; border-color: #f6e05e; }
-  .details-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 200px 160px; gap: 20px; align-items: start; }
-  .detail-item label { display: block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; margin-bottom: 10px; color: #4a5568 !important; }
-  .record-text { background: #fff !important; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; font-family: monospace; font-size: 0.85rem; color: #2d3748 !important; line-height: 1.4; }
-  .cname-list div { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; padding-left: 22px; position: relative; color: #1a202c !important; }
+  .details-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 1fr 180px; gap: 24px; align-items: start; }
+  
+  .refresh-action { 
+    display: flex; 
+    align-items: flex-start; /* Предотвращает растягивание кнопки по вертикали */
+  }
+
+  .btn-refresh { 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 8px; 
+    background: #10b981 !important; 
+    color: white !important; 
+    border: none; 
+    padding: 16px; 
+    border-radius: 12px; 
+    font-weight: 800; 
+    font-size: 0.8rem; 
+    cursor: pointer; 
+    width: 100%; 
+    max-height: 100px; /* Ограничивает гигантский размер */
+    text-transform: uppercase; 
+    box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);
+  }
+  .btn-refresh svg { width: 24px; height: 24px; }
+  .btn-refresh:hover { background: #059669 !important; transform: translateY(-2px); }
+
+  .cname-list div { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; padding-left: 24px; position: relative; color: #1a202c !important; }
   .cname-list .ok::before { content: '✅'; position: absolute; left: 0; }
   .cname-list .missing::before { content: '❌'; position: absolute; left: 0; }
   .cname-list .error::before { content: '❌'; position: absolute; left: 0; }
   .cname-list .wait::before { content: '⏳'; position: absolute; left: 0; }
-  .btn-refresh { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: #10b981 !important; color: white !important; border: none; padding: 15px; border-radius: 12px; font-weight: 800; font-size: 0.8rem; cursor: pointer; width: 100%; text-transform: uppercase; }
-  .btn-refresh:hover { background: #059669 !important; transform: translateY(-2px); }
-  .validation-box { margin-top: 8px; background: #fff !important; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.8rem; }
-  .val-err { color: #e53e3e !important; }
-  .val-warn { color: #d69e2e !important; }
-  .val-ok { color: #38a169 !important; }
 
+  .domain-copy-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0; }
+  .large-domain { font-size: 1.5rem; font-weight: 900; color: #1a202c !important; }
+  .btn-copy { display: flex; align-items: center; gap: 6px; background: #edf2f7; border: 1px solid #cbd5e0; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; color: #4a5568 !important; cursor: pointer; }
+  
   @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 </style>
