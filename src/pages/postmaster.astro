@@ -68,7 +68,7 @@ import Layout from '../layouts/Layout.astro';
   let rawData = [];
   let sortCol = 'domain';
   let sortAsc = true;
-  let activeFilter = 'ALL'; // Глобальное состояние активного фильтра
+  let activeFilter = 'ALL'; 
 
   async function init() {
     try {
@@ -85,10 +85,8 @@ import Layout from '../layouts/Layout.astro';
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('domainSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
-    // 1. Сначала фильтруем только по тексту поиска (это нужно для карточек, чтобы они показывали актуальные цифры по поиску)
     let searchFiltered = rawData.filter(d => d.domain.toLowerCase().includes(searchTerm));
 
-    // 2. Затем применяем логику карточек-фильтров (это пойдет в таблицу)
     let tableFiltered = searchFiltered.filter(d => {
       if (activeFilter === 'ALL') return true;
       if (activeFilter === 'HIGH') return d.domain_rep === 'HIGH';
@@ -99,7 +97,6 @@ import Layout from '../layouts/Layout.astro';
       return true;
     });
 
-    // 3. Сортировка
     tableFiltered.sort((a, b) => {
       let valA = a[sortCol] || '';
       let valB = b[sortCol] || '';
@@ -121,15 +118,14 @@ import Layout from '../layouts/Layout.astro';
       return 0;
     });
 
-    renderSummary(searchFiltered); // Карточки строятся на основе searchFiltered, чтобы не пропадали при клике
-    renderTable(tableFiltered);    // А таблица строится с учетом кликнутой карточки
+    renderSummary(searchFiltered); 
+    renderTable(tableFiltered);    
   }
 
   function renderSummary(data) {
     const container = document.getElementById('pm-summary');
     if (!container) return;
     
-    // Считаем метрики для 6 карточек
     const total = data.length;
     const highCount = data.filter(d => d.domain_rep === 'HIGH').length;
     const medCount = data.filter(d => d.domain_rep === 'MEDIUM').length;
@@ -137,7 +133,6 @@ import Layout from '../layouts/Layout.astro';
     const badCount = data.filter(d => d.domain_rep === 'BAD').length;
     const highSpamCount = data.filter(d => (d.spam_rate || 0) >= 0.003).length;
 
-    // Функция для подсветки активной карточки
     const getActiveCls = (filterType) => activeFilter === filterType ? 'active-filter' : '';
 
     container.innerHTML = `
@@ -168,9 +163,7 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  // Глобальная функция для смены фильтра по клику на карточку
   (window as any).setCategoryFilter = (filterType) => {
-    // Если кликнули на уже активный фильтр, сбрасываем на ALL
     if (activeFilter === filterType) {
       activeFilter = 'ALL';
     } else {
@@ -294,6 +287,41 @@ import Layout from '../layouts/Layout.astro';
     
     let html = '';
 
+    // Блок 0: График Spam Rate
+    html += `<div class="details-section"><h3>📉 Spam Rate (Last 7 Days)</h3>`;
+    try {
+      const history = JSON.parse(row.spam_history || '[]');
+      if (history.length === 0) {
+        html += `<p class="text-gray">No history available for the last 7 days.</p>`;
+      } else {
+        let bars = '';
+        // Находим максимум для масштабирования графика, но не меньше 0.5% для визуального баланса
+        const maxRate = Math.max(...history.map(h => h.rate), 0.005); 
+        
+        history.forEach(h => {
+          const pct = (h.rate * 100).toFixed(2) + '%';
+          const height = Math.min((h.rate / maxRate) * 100, 100) + '%';
+          
+          let color = '#48bb78'; // Green
+          if (h.rate >= 0.003) color = '#e53e3e'; // Red
+          else if (h.rate >= 0.001) color = '#ecc94b'; // Yellow
+
+          bars += `
+            <div class="chart-bar-wrap">
+              <span class="chart-val" style="color: ${color};">${pct}</span>
+              <div class="chart-bar" title="${h.date}: ${pct} Spam" style="background-color: ${color}; height: ${height};"></div>
+              <span class="chart-date">${h.date}</span>
+            </div>
+          `;
+        });
+        html += `<div class="spam-chart-container">${bars}</div>`;
+      }
+    } catch (e) {
+      html += `<p class="text-gray">No history data parsed.</p>`;
+    }
+    html += `</div>`;
+
+    // Блок 1: Ошибки доставки
     html += `<div class="details-section"><h3>🛑 Delivery Errors</h3>`;
     try {
       const errors = JSON.parse(row.delivery_errors || '[]');
@@ -313,6 +341,7 @@ import Layout from '../layouts/Layout.astro';
     }
     html += `</div>`;
 
+    // Блок 2: Детализация IP адресов
     html += `<div class="details-section"><h3>🌐 IP Reputation (Sample IPs)</h3>`;
     try {
       const ipReps = JSON.parse(row.ip_rep_detailed || '[]');
@@ -386,33 +415,17 @@ import Layout from '../layouts/Layout.astro';
   .btn-primary { display: flex; align-items: center; gap: 8px; background: #3182ce; color: #fff; padding: 12px 24px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
   .btn-primary:hover { background: #2b6cb0; }
   
-  /* Обновленная сетка под 6 карточек */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   
-  /* Стили для кликабельных карточек */
-  .stat-card { 
-    background: #fff !important; 
-    padding: 1.5rem; 
-    border-radius: 12px; 
-    border: 1px solid #cbd5e0; 
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-    transition: all 0.2s ease;
-  }
+  .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; }
   .stat-card.filterable { cursor: pointer; }
   .stat-card.filterable:hover { transform: translateY(-3px); box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
   
-  /* Подсветка активного фильтра */
-  .stat-card.active-filter { 
-    background: #ebf8ff !important; 
-    border: 2px solid #3182ce; 
-    transform: translateY(-2px); 
-    box-shadow: 0 4px 10px rgba(49,130,206,0.2); 
-  }
+  .stat-card.active-filter { background: #ebf8ff !important; border: 2px solid #3182ce; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(49,130,206,0.2); }
   
-  /* Цветовые полоски слева */
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
-  .stat-card.danger-light { border-left: 6px solid #ed8936 !important; } /* Оранжевый для Low */
-  .stat-card.warning { border-left: 6px solid #ecc94b !important; } /* Желтый для Medium */
+  .stat-card.danger-light { border-left: 6px solid #ed8936 !important; } 
+  .stat-card.warning { border-left: 6px solid #ecc94b !important; } 
   .stat-card.success { border-left: 6px solid #48bb78 !important; }
   .stat-card.info { border-left: 6px solid #3182ce !important; }
   
@@ -460,4 +473,12 @@ import Layout from '../layouts/Layout.astro';
   .ip-list { font-family: monospace; background: #edf2f7; padding: 10px 15px; border-radius: 6px; font-size: 0.85rem; max-height: 150px; overflow-y: auto; margin-top: 8px; border: 1px solid #e2e8f0; line-height: 1.6; }
   .error-list { padding-left: 1.2rem; margin: 0; }
   .error-list li { margin-bottom: 0.5rem; font-size: 0.95rem; }
+
+  /* Стили для графика Spam Rate */
+  .spam-chart-container { display: flex; align-items: flex-end; gap: 8px; padding: 10px 0; height: 120px; border-bottom: 1px solid #edf2f7; }
+  .chart-bar-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; flex: 1; min-width: 40px; }
+  .chart-bar { width: 100%; min-height: 4px; border-radius: 4px 4px 0 0; transition: height 0.4s ease; cursor: pointer; opacity: 0.8; }
+  .chart-bar:hover { opacity: 1; }
+  .chart-val { font-size: 0.75rem; font-weight: bold; margin-bottom: 4px; }
+  .chart-date { font-size: 0.7rem; color: #718096; margin-top: 6px; }
 </style>
