@@ -64,6 +64,7 @@ import Layout from '../layouts/Layout.astro';
   const API_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   const SYNC_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/sync-now';
   const DISCOVER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/discover';
+  const TOGGLE_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/toggle-alert';
   
   let rawData = [];
   let sortCol = 'domain';
@@ -185,7 +186,14 @@ import Layout from '../layouts/Layout.astro';
     data.forEach(row => {
       html += `
         <tr class="domain-row">
-          <td class="domain-text">
+          <td class="domain-text" style="display: flex; align-items: center; gap: 8px;">
+            <span 
+              class="alert-toggle ${row.alert_enabled ? 'active' : ''}" 
+              onclick="window.toggleAlert('${row.domain}', ${row.alert_enabled ? 0 : 1}, event)" 
+              title="${row.alert_enabled ? 'Disable Slack Alerts' : 'Enable Slack Alerts'}"
+            >
+              🔔
+            </span>
             <a href="javascript:void(0)" onclick="window.showDetails('${row.domain}')" class="domain-link" title="Click for details">
               <strong>${row.domain}</strong>
             </a>
@@ -278,6 +286,33 @@ import Layout from '../layouts/Layout.astro';
     return new Date(d).toLocaleDateString('cs-CZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
 
+  (window as any).toggleAlert = async (domain, targetState, event) => {
+    event.stopPropagation();
+    
+    const icon = event.target;
+    if (targetState === 1) {
+      icon.classList.add('active');
+    } else {
+      icon.classList.remove('active');
+    }
+    
+    const row = rawData.find(d => d.domain === domain);
+    if (row) row.alert_enabled = targetState;
+
+    try {
+      await fetch(TOGGLE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: domain, enabled: targetState === 1 })
+      });
+    } catch (e) {
+      console.error("Failed to toggle alert", e);
+      if (targetState === 1) icon.classList.remove('active');
+      else icon.classList.add('active');
+      if (row) row.alert_enabled = targetState === 1 ? 0 : 1;
+    }
+  };
+
   (window as any).showDetails = (domain) => {
     const row = rawData.find(d => d.domain === domain);
     if (!row) return;
@@ -287,7 +322,6 @@ import Layout from '../layouts/Layout.astro';
     
     let html = '';
 
-    // Блок 0: График Spam Rate
     html += `<div class="details-section"><h3>📉 Spam Rate (Last 7 Days)</h3>`;
     try {
       const history = JSON.parse(row.spam_history || '[]');
@@ -295,7 +329,6 @@ import Layout from '../layouts/Layout.astro';
         html += `<p class="text-gray">No history available for the last 7 days.</p>`;
       } else {
         let bars = '';
-        // Находим максимум для масштабирования графика, но не меньше 0.5% для визуального баланса
         const maxRate = Math.max(...history.map(h => h.rate), 0.005); 
         
         history.forEach(h => {
@@ -321,7 +354,6 @@ import Layout from '../layouts/Layout.astro';
     }
     html += `</div>`;
 
-    // Блок 1: Ошибки доставки
     html += `<div class="details-section"><h3>🛑 Delivery Errors</h3>`;
     try {
       const errors = JSON.parse(row.delivery_errors || '[]');
@@ -341,7 +373,6 @@ import Layout from '../layouts/Layout.astro';
     }
     html += `</div>`;
 
-    // Блок 2: Детализация IP адресов
     html += `<div class="details-section"><h3>🌐 IP Reputation (Sample IPs)</h3>`;
     try {
       const ipReps = JSON.parse(row.ip_rep_detailed || '[]');
@@ -481,4 +512,9 @@ import Layout from '../layouts/Layout.astro';
   .chart-bar:hover { opacity: 1; }
   .chart-val { font-size: 0.75rem; font-weight: bold; margin-bottom: 4px; }
   .chart-date { font-size: 0.7rem; color: #718096; margin-top: 6px; }
+
+  /* Стили для колокольчика алертов */
+  .alert-toggle { cursor: pointer; opacity: 0.3; filter: grayscale(100%); transition: all 0.2s ease; font-size: 1.1rem; user-select: none; }
+  .alert-toggle:hover { opacity: 0.7; transform: scale(1.1); }
+  .alert-toggle.active { opacity: 1; filter: none; text-shadow: 0 0 8px rgba(236, 201, 75, 0.6); }
 </style>
