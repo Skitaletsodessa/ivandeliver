@@ -86,7 +86,7 @@ import Layout from '../layouts/Layout.astro';
 <script>
   const API_URL = 'https://checkdns.skitalets-od.workers.dev/api/domains';
   const CHECK_URL = 'https://checkdns.skitalets-od.workers.dev/api/check-domain?domain=';
-  const IMPORT_URL = 'https://checkdns.skitalets-od.workers.dev/api/import'; // Добавлен IMPORT_URL
+  const IMPORT_URL = 'https://checkdns.skitalets-od.workers.dev/api/import'; 
   
   let rawData = [];
   let currentFilteredData = []; 
@@ -98,23 +98,22 @@ import Layout from '../layouts/Layout.astro';
   let sortCol = 'default';
   let sortAsc = true;
 
-  // ДОБАВЛЕННАЯ ЛОГИКА ДОБАВЛЕНИЯ ДОМЕНА
   (window as any).submitNewDomain = async () => {
     const input = document.getElementById('newDomainInput') as HTMLInputElement;
     const prodSel = document.getElementById('newProductSelect') as HTMLSelectElement;
     const typeSel = document.getElementById('newTypeSelect') as HTMLSelectElement;
     const btn = document.getElementById('addSubmitBtn') as HTMLButtonElement;
-
     const domain = input.value.trim().toLowerCase();
+    
     if (!domain || !domain.includes('.')) { alert("Please enter a valid domain"); return; }
 
     btn.disabled = true;
     btn.innerText = '⏳ Processing...';
-
     try {
       await fetch(IMPORT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // При добавлении из UI email и имя пока не указываем, они только через API от аналитика
         body: JSON.stringify([{ domain, product: prodSel.value, account_type: typeSel.value }])
       });
       await fetch(CHECK_URL + domain);
@@ -125,13 +124,13 @@ import Layout from '../layouts/Layout.astro';
         const tab = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent === prodSel.value);
         if (tab) (tab as HTMLElement).click();
       }
-    } catch (e) { alert("Error adding domain"); } finally {
+    } catch (e) { alert("Error adding domain");
+    } finally {
       btn.disabled = false;
       btn.innerText = 'Add & Verify';
     }
   };
 
-  // --- ВЕСЬ ОСТАЛЬНОЙ КОД БЕЗ ИЗМЕНЕНИЙ ---
   function validateSPF(recordStr) {
     let errors = new Set();
     let warnings = new Set();
@@ -139,7 +138,6 @@ import Layout from '../layouts/Layout.astro';
     if (!recordStr) return { errors: ['No SPF record found'], warnings: [], lookups };
     const records = recordStr.split(' | ');
     const lowerRecordStr = recordStr.toLowerCase();
-    
     if (!lowerRecordStr.includes('include:_spf.tinyemail.com')) {
       errors.add('Missing required include: _spf.tinyemail.com');
     }
@@ -213,7 +211,6 @@ import Layout from '../layouts/Layout.astro';
 
       d.isCritical = d.virtual_spf !== 'OK' && d.virtual_spf !== 'WARNING' || d.virtual_dmarc !== 'OK' && d.virtual_dmarc !== 'WARNING';
       d.isConfig = !d.isCritical && (d.dkim1_status !== 'OK' || d.dkim2_status !== 'OK' || d.bounce_status !== 'Present');
-
       return d;
     });
   }
@@ -290,11 +287,10 @@ import Layout from '../layouts/Layout.astro';
       renderSummary(productData);
 
       let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
-
       if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
       else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
       else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
-
+      
       filtered.sort((a, b) => {
         if (sortCol === 'default') {
           const getWeight = (d) => {
@@ -340,7 +336,7 @@ import Layout from '../layouts/Layout.astro';
     }
     applyFiltersAndRender();
   };
-
+  
   (window as any).setProductFilter = (prod, event) => {
     currentProduct = prod;
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -357,10 +353,10 @@ import Layout from '../layouts/Layout.astro';
     else btn?.classList.remove('active');
     applyFiltersAndRender();
   };
-
+  
   (window as any).setDnsFilter = (f) => { currentFilter = f; applyFiltersAndRender(); };
   (window as any).toggleRow = (domain) => { expandedDomain = (expandedDomain === domain) ? null : domain; applyFiltersAndRender(); };
-
+  
   (window as any).copyDomain = (domain, btn) => {
     navigator.clipboard.writeText(domain);
     const originalText = btn.innerHTML;
@@ -368,7 +364,7 @@ import Layout from '../layouts/Layout.astro';
     btn.classList.add('copied');
     setTimeout(() => { btn.innerHTML = originalText; btn.classList.remove('copied'); }, 2000);
   };
-
+  
   (window as any).refreshDomain = async (domain, event) => {
     event.stopPropagation();
     const btn = event.currentTarget;
@@ -388,11 +384,13 @@ import Layout from '../layouts/Layout.astro';
       return;
     }
     
-    const headers = ['Domain', 'Product', 'Account Type', 'SPF Status', 'DMARC Status', 'DKIM 1', 'DKIM 2', 'Bounce', 'Warmup EM', 'Warmup SEND', 'Last Checked'];
+    // ВАЖНО: Добавлено поле Major Account Name
+    const headers = ['Domain', 'Product', 'Account Type', 'Account Name', 'SPF Status', 'DMARC Status', 'DKIM 1', 'DKIM 2', 'Bounce', 'Warmup EM', 'Warmup SEND', 'Last Checked'];
     const rows = currentFilteredData.map(d => [
       d.domain,
       d.product,
       d.account_type,
+      d.major_account_name || '', 
       d.virtual_spf,
       d.virtual_dmarc,
       d.dkim1_status || 'MISSING',
@@ -402,12 +400,12 @@ import Layout from '../layouts/Layout.astro';
       d.warmup_send_status || 'None',
       d.last_checked || 'PENDING'
     ]);
-
+    
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.join(','))
     ].join('\n');
-
+    
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -450,7 +448,13 @@ import Layout from '../layouts/Layout.astro';
           <td class="date-col">${formatDate(row.last_checked)}</td>
         </tr>
       `;
+      
       if (isExpanded) {
+        // ВАЖНО: Добавлен бейдж с именем клиента, если это Major аккаунт
+        const accountNameBadge = row.account_type === 'Major' && row.major_account_name 
+          ? `<span class="info-tag" style="background:#e2e8f0; border-color:#cbd5e0; color:#2d3748;">🏢 ${row.major_account_name}</span>` 
+          : '';
+
         html += `
           <tr class="details-row">
             <td colspan="8">
@@ -463,6 +467,7 @@ import Layout from '../layouts/Layout.astro';
                   </button>
                   <span class="info-tag product-tag">${row.product}</span>
                   <span class="info-tag type-tag ${row.account_type === 'Major' ? 'major' : ''}">${row.account_type} Account</span>
+                  ${accountNameBadge}
                 </div>
                 <div class="details-grid">
                   <div class="detail-item ${row.virtual_spf === 'ERROR' || row.virtual_spf === 'DUPLICATE' ? 'error-block' : ''}">
@@ -482,7 +487,7 @@ import Layout from '../layouts/Layout.astro';
                     
                     <label style="margin-top: 15px;">Custom Return-Path:</label>
                     <div class="cname-list">
-                      <div class="${row.bounce_status === 'Present' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">bounce: ${row.bounce_status || 'PENDING'}</div>
+                       <div class="${row.bounce_status === 'Present' ? 'ok' : (row.isPending ? 'wait' : 'missing')}">bounce: ${row.bounce_status || 'PENDING'}</div>
                     </div>
 
                     <label style="margin-top: 15px;">Tiny Warmup:</label>
@@ -539,12 +544,13 @@ import Layout from '../layouts/Layout.astro';
   }
 
   function getSmallIcon(s) { 
-    if (s === 'OK' || s === 'Present' || s === 'Present and Match') return '✅'; 
+    if (s === 'OK' || s === 'Present' || s === 'Present and Match') return '✅';
     if (!s || s === 'null' || s === 'PENDING') return '⏳'; 
-    return '❌'; 
+    return '❌';
   }
   
-  function formatDate(d) { if (!d || d.includes('1970')) return '—'; return new Date(d).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+  function formatDate(d) { if (!d || d.includes('1970')) return '—';
+    return new Date(d).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
 
   init();
 </script>
