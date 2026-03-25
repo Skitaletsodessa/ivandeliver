@@ -478,23 +478,47 @@ import Layout from '../layouts/Layout.astro';
     applyFiltersAndRender();
   };
 
+  // --- ОБНОВЛЕННАЯ УМНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ДОМЕНОВ ---
   (window as any).syncPostmaster = async (btn) => {
     const originalText = btn.innerHTML;
     btn.style.opacity = '0.7';
+    btn.style.pointerEvents = 'none';
     
     try {
       btn.innerHTML = '⏳ Discovering...';
       await fetch(DISCOVER_URL);
-      
-      btn.innerHTML = '⏳ Syncing Batch...';
-      await fetch(SYNC_URL);
-      
       await init(); 
+      
+      const totalDomains = rawData.length;
+      if (totalDomains === 0) {
+        btn.innerHTML = 'No domains found';
+        return;
+      }
+
+      const batchSize = 50;
+      const totalBatches = Math.ceil(totalDomains / batchSize);
+
+      for (let i = 1; i <= totalBatches; i++) {
+        btn.innerHTML = `⏳ Syncing Batch ${i}/${totalBatches}...`;
+        const response = await fetch(SYNC_URL);
+        const result = await response.json();
+        
+        await init(); 
+        
+        if (result.processed === 0) break; 
+      }
+
+      btn.innerHTML = '✅ All Synced!';
+      
     } catch (e) {
       alert("Sync failed. Check console.");
+      console.error(e);
     } finally {
-      btn.innerHTML = originalText;
-      btn.style.opacity = '1';
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+      }, 2000);
     }
   };
 
