@@ -342,7 +342,34 @@ import Layout from '../layouts/Layout.astro';
     let html = '';
 
     // --- ОБЪЕДИНЕННЫЙ ГРАФИК SPAM & REPUTATION ---
-    html += `<div class="details-section"><h3>📊 Spam & Reputation History (30 Days)</h3>`;
+    html += `<div class="details-section">`;
+    html += `<h3>📊 Spam & Reputation History (30 Days)</h3>`;
+    
+    // --- ЛЕГЕНДА ДЛЯ ГРАФИКА ---
+    html += `
+      <div class="chart-legend">
+        <div class="legend-block">
+          <span class="legend-title">Top: Spam Rate</span>
+          <div class="legend-items">
+            <span class="legend-item"><div class="l-bar" style="background:#48bb78"></div> &lt; 0.1%</span>
+            <span class="legend-item"><div class="l-bar" style="background:#ecc94b"></div> 0.1-0.3%</span>
+            <span class="legend-item"><div class="l-bar" style="background:#e53e3e"></div> &ge; 0.3%</span>
+          </div>
+        </div>
+        <div class="legend-divider"></div>
+        <div class="legend-block">
+          <span class="legend-title">Bottom: Domain Rep</span>
+          <div class="legend-items">
+            <span class="legend-item"><div class="l-box" style="background:#48bb78"></div> High</span>
+            <span class="legend-item"><div class="l-box" style="background:#ecc94b"></div> Medium</span>
+            <span class="legend-item"><div class="l-box" style="background:#ed8936"></div> Low</span>
+            <span class="legend-item"><div class="l-box" style="background:#e53e3e"></div> Bad</span>
+            <span class="legend-item"><div class="l-box" style="background:#e2e8f0"></div> Unknown</span>
+          </div>
+        </div>
+      </div>
+    `;
+
     try {
       const spamHistory = JSON.parse(row.spam_history || '[]');
       const repHistory = JSON.parse(row.rep_history || '[]');
@@ -528,7 +555,6 @@ import Layout from '../layouts/Layout.astro';
   .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
   .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
 
-  /* ОБНОВЛЕННЫЕ СТИЛИ МОДАЛЬНОГО ОКНА (ШИРЕ И ВЫШЕ) */
   .modal { border: none; border-radius: 12px; padding: 0; width: 95%; max-width: 1350px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); background: #fff; color: #1a202c; }
   .modal::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
   .modal-content { display: flex; flex-direction: column; }
@@ -544,10 +570,18 @@ import Layout from '../layouts/Layout.astro';
   .error-list { padding-left: 1.2rem; margin: 0; color: #2d3748; }
   .error-list li { margin-bottom: 0.75rem; font-size: 0.95rem; }
 
-  /* ОБЪЕДИНЕННЫЙ ГРАФИК (БЕЗ СКРОЛЛА НА ДЕСКТОПЕ) */
+  /* СТИЛИ ЛЕГЕНДЫ */
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 20px; background: #f8fafc; padding: 12px 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; align-items: center; }
+  .legend-block { display: flex; align-items: center; gap: 12px; }
+  .legend-title { font-size: 0.75rem; font-weight: 800; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; }
+  .legend-items { display: flex; align-items: center; gap: 12px; font-size: 0.75rem; color: #718096; font-weight: 600; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .l-bar { width: 10px; height: 12px; border-radius: 2px 2px 0 0; }
+  .l-box { width: 14px; height: 14px; border-radius: 3px; }
+  .legend-divider { width: 1px; height: 24px; background: #cbd5e0; margin: 0 5px; }
+
+  /* ОБЪЕДИНЕННЫЙ ГРАФИК */
   .combined-chart-container { display: flex; gap: 4px; padding: 10px 0 25px 0; overflow-x: auto; align-items: flex-end; justify-content: center; }
-  
-  /* Чуть шире колонки для лучшей читаемости */
   .combined-col { display: flex; flex-direction: column; align-items: center; min-width: 40px; flex: 1; max-width: 60px; }
   
   .spam-part { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 110px; width: 100%; margin-bottom: 6px; }
