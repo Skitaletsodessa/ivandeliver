@@ -194,6 +194,13 @@ import Layout from '../layouts/Layout.astro';
             >
               🔔
             </span>
+            <span 
+              class="sync-single-btn" 
+              onclick="window.syncSingleDomain('${row.domain}', event)" 
+              title="Force sync this domain"
+            >
+              🔄
+            </span>
             <a href="javascript:void(0)" onclick="window.showDetails('${row.domain}')" class="domain-link" title="Click for details">
               <strong>${row.domain}</strong>
             </a>
