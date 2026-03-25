@@ -32,6 +32,11 @@ import Layout from '../layouts/Layout.astro';
             <option value="Major">Major</option>
           </select>
         </div>
+        <div class="add-group" id="majorAccountNameGroup" style="display: none;">
+          <label>Account Name</label>
+          <input type="text" id="newAccountNameInput" placeholder="e.g. Acme Corp" class="input-field-add" />
+        </div>
+        
         <button id="addSubmitBtn" class="btn-add-domain" onclick="window.submitNewDomain()">
           Add & Verify
         </button>
@@ -98,14 +103,44 @@ import Layout from '../layouts/Layout.astro';
   let sortCol = 'default';
   let sortAsc = true;
 
+  // ВАЖНО: Слушатель для показа/скрытия поля Account Name
+  document.addEventListener('DOMContentLoaded', () => {
+    const typeSelect = document.getElementById('newTypeSelect');
+    const nameGroup = document.getElementById('majorAccountNameGroup');
+    const nameInput = document.getElementById('newAccountNameInput') as HTMLInputElement;
+
+    typeSelect?.addEventListener('change', (e) => {
+      if ((e.target as HTMLSelectElement).value === 'Major') {
+        nameGroup.style.display = 'flex';
+      } else {
+        nameGroup.style.display = 'none';
+        nameInput.value = ''; // Очищаем поле при скрытии
+      }
+    });
+  });
+
   (window as any).submitNewDomain = async () => {
     const input = document.getElementById('newDomainInput') as HTMLInputElement;
     const prodSel = document.getElementById('newProductSelect') as HTMLSelectElement;
     const typeSel = document.getElementById('newTypeSelect') as HTMLSelectElement;
+    const nameInput = document.getElementById('newAccountNameInput') as HTMLInputElement;
     const btn = document.getElementById('addSubmitBtn') as HTMLButtonElement;
+    
     const domain = input.value.trim().toLowerCase();
     
     if (!domain || !domain.includes('.')) { alert("Please enter a valid domain"); return; }
+
+    const accountType = typeSel.value;
+    let majorAccountName = null;
+
+    if (accountType === 'Major') {
+      majorAccountName = nameInput.value.trim();
+      if (!majorAccountName) {
+        alert("Please enter the Account Name for Major accounts.");
+        nameInput.focus();
+        return;
+      }
+    }
 
     btn.disabled = true;
     btn.innerText = '⏳ Processing...';
@@ -113,10 +148,21 @@ import Layout from '../layouts/Layout.astro';
       await fetch(IMPORT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([{ domain, product: prodSel.value, account_type: typeSel.value }])
+        body: JSON.stringify([{ 
+          domain: domain, 
+          product: prodSel.value, 
+          account_type: accountType,
+          major_account_name: majorAccountName
+        }])
       });
       await fetch(CHECK_URL + domain);
+      
+      // Очистка формы
       input.value = '';
+      nameInput.value = '';
+      typeSel.value = 'Non-Major';
+      document.getElementById('majorAccountNameGroup').style.display = 'none';
+      
       await init(); 
       
       if (currentProduct !== prodSel.value) {
@@ -285,7 +331,6 @@ import Layout from '../layouts/Layout.astro';
       
       renderSummary(productData);
 
-      // ВАЖНО: Обновлена логика поиска. Ищем и по домену, и по имени аккаунта
       let filtered = productData.filter(d => {
         const matchDomain = d.domain.toLowerCase().includes(searchTerm);
         const matchAccount = d.major_account_name ? d.major_account_name.toLowerCase().includes(searchTerm) : false;
@@ -434,7 +479,6 @@ import Layout from '../layouts/Layout.astro';
       const isExpanded = expandedDomain === row.domain;
       const majorBadge = row.account_type === 'Major' ? `<span class="major-badge" title="Major Account">⭐</span>` : '';
       
-      // ВАЖНО: Бейджик с именем аккаунта для вывода прямо в строке таблицы
       const inlineAccountBadge = row.account_type === 'Major' && row.major_account_name 
         ? `<span class="inline-account-badge" title="Account Name">🏢 ${row.major_account_name}</span>` 
         : '';
