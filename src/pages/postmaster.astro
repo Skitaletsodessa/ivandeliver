@@ -65,6 +65,7 @@ import Layout from '../layouts/Layout.astro';
   const SYNC_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/sync-now';
   const DISCOVER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/discover';
   const TOGGLE_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/toggle-alert';
+  const SYNC_SINGLE_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/sync-single';
   
   let rawData = [];
   let sortCol = 'domain';
@@ -320,6 +321,28 @@ import Layout from '../layouts/Layout.astro';
     }
   };
 
+  (window as any).syncSingleDomain = async (domain, event) => {
+    event.stopPropagation();
+    const btn = event.target;
+    
+    // Включаем анимацию вращения
+    btn.classList.add('spinning');
+    
+    try {
+      await fetch(SYNC_SINGLE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: domain })
+      });
+      // После успешной синхронизации обновляем всю таблицу
+      await init(); 
+    } catch (e) {
+      alert("Failed to sync domain: " + domain);
+      console.error(e);
+      btn.classList.remove('spinning');
+    }
+  };
+
   (window as any).showDetails = (domain) => {
     const row = rawData.find(d => d.domain === domain);
     if (!row) return;
@@ -524,4 +547,10 @@ import Layout from '../layouts/Layout.astro';
   .alert-toggle { cursor: pointer; opacity: 0.3; filter: grayscale(100%); transition: all 0.2s ease; font-size: 1.1rem; user-select: none; }
   .alert-toggle:hover { opacity: 0.7; transform: scale(1.1); }
   .alert-toggle.active { opacity: 1; filter: none; text-shadow: 0 0 8px rgba(236, 201, 75, 0.6); }
+  
+  /* Кнопка точечной синхронизации */
+  .sync-single-btn { cursor: pointer; opacity: 0.4; font-size: 1rem; transition: all 0.2s ease; user-select: none; }
+  .sync-single-btn:hover { opacity: 1; transform: scale(1.1); }
+  .sync-single-btn.spinning { animation: spin 1s linear infinite; opacity: 1; pointer-events: none; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
