@@ -48,7 +48,7 @@ import Layout from '../layouts/Layout.astro';
 
     <div class="table-actions-bar">
       <div class="left-actions">
-        <input type="text" id="domainSearch" placeholder="Filter by domain..." class="input-field search-input" />
+        <input type="text" id="domainSearch" placeholder="Filter by domain or client..." class="input-field search-input" />
         <button id="btnMajorToggle" class="btn-major-filter" onclick="window.toggleMajor()">
           ⭐ Major Only
         </button>
@@ -113,7 +113,6 @@ import Layout from '../layouts/Layout.astro';
       await fetch(IMPORT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // При добавлении из UI email и имя пока не указываем, они только через API от аналитика
         body: JSON.stringify([{ domain, product: prodSel.value, account_type: typeSel.value }])
       });
       await fetch(CHECK_URL + domain);
@@ -286,7 +285,13 @@ import Layout from '../layouts/Layout.astro';
       
       renderSummary(productData);
 
-      let filtered = productData.filter(d => d.domain.toLowerCase().includes(searchTerm));
+      // ВАЖНО: Обновлена логика поиска. Ищем и по домену, и по имени аккаунта
+      let filtered = productData.filter(d => {
+        const matchDomain = d.domain.toLowerCase().includes(searchTerm);
+        const matchAccount = d.major_account_name ? d.major_account_name.toLowerCase().includes(searchTerm) : false;
+        return matchDomain || matchAccount;
+      });
+
       if (currentFilter === 'critical') filtered = filtered.filter(d => d.isCritical && !d.isPending);
       else if (currentFilter === 'config') filtered = filtered.filter(d => d.isConfig && !d.isPending);
       else if (currentFilter === 'pending') filtered = filtered.filter(d => d.isPending);
@@ -384,7 +389,6 @@ import Layout from '../layouts/Layout.astro';
       return;
     }
     
-    // ВАЖНО: Добавлено поле Major Account Name
     const headers = ['Domain', 'Product', 'Account Type', 'Account Name', 'SPF Status', 'DMARC Status', 'DKIM 1', 'DKIM 2', 'Bounce', 'Warmup EM', 'Warmup SEND', 'Last Checked'];
     const rows = currentFilteredData.map(d => [
       d.domain,
@@ -430,6 +434,11 @@ import Layout from '../layouts/Layout.astro';
       const isExpanded = expandedDomain === row.domain;
       const majorBadge = row.account_type === 'Major' ? `<span class="major-badge" title="Major Account">⭐</span>` : '';
       
+      // ВАЖНО: Бейджик с именем аккаунта для вывода прямо в строке таблицы
+      const inlineAccountBadge = row.account_type === 'Major' && row.major_account_name 
+        ? `<span class="inline-account-badge" title="Account Name">🏢 ${row.major_account_name}</span>` 
+        : '';
+      
       let emClass = row.warmup_em_status === 'Present and Match' ? 'ok' : (row.warmup_em_status === 'Present Mismatch' ? 'error' : (row.isPending ? 'wait' : 'missing'));
       let emMsg = row.warmup_em_status === 'Present and Match' ? 'emtny.tec-send3.com' : (row.warmup_em_status === 'Present Mismatch' ? 'Mismatch (Expected: emtny.tec-send3.com)' : (row.isPending ? 'PENDING' : 'Missing (Add CNAME -> emtny.tec-send3.com)'));
 
@@ -438,7 +447,9 @@ import Layout from '../layouts/Layout.astro';
 
       html += `
         <tr class="domain-row ${row.isCritical ? 'row-alert' : ''} ${isExpanded ? 'active-row' : ''}" onclick="window.toggleRow('${row.domain}')">
-          <td class="domain-text"><strong>${row.domain}</strong> ${majorBadge}</td>
+          <td class="domain-text">
+            <strong>${row.domain}</strong> ${majorBadge} ${inlineAccountBadge}
+          </td>
           <td class="center">${getStatusBadge(row.virtual_spf)}</td>
           <td class="center">${getStatusBadge(row.virtual_dmarc)}</td>
           <td class="center">${getSmallIcon(row.dkim1_status)}</td>
@@ -450,11 +461,6 @@ import Layout from '../layouts/Layout.astro';
       `;
       
       if (isExpanded) {
-        // ВАЖНО: Добавлен бейдж с именем клиента, если это Major аккаунт
-        const accountNameBadge = row.account_type === 'Major' && row.major_account_name 
-          ? `<span class="info-tag" style="background:#e2e8f0; border-color:#cbd5e0; color:#2d3748;">🏢 ${row.major_account_name}</span>` 
-          : '';
-
         html += `
           <tr class="details-row">
             <td colspan="8">
@@ -467,7 +473,7 @@ import Layout from '../layouts/Layout.astro';
                   </button>
                   <span class="info-tag product-tag">${row.product}</span>
                   <span class="info-tag type-tag ${row.account_type === 'Major' ? 'major' : ''}">${row.account_type} Account</span>
-                  ${accountNameBadge}
+                  ${inlineAccountBadge}
                 </div>
                 <div class="details-grid">
                   <div class="detail-item ${row.virtual_spf === 'ERROR' || row.virtual_spf === 'DUPLICATE' ? 'error-block' : ''}">
@@ -556,7 +562,7 @@ import Layout from '../layouts/Layout.astro';
 </script>
 
 <style is:global>
-  /* --- ТВОИ ОРИГИНАЛЬНЫЕ СТИЛИ (НЕ ТРОГАЛ) --- */
+  /* --- ТВОИ ОРИГИНАЛЬНЫЕ СТИЛИ --- */
   .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; }
   .content-header { margin-bottom: 2rem; }
   .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
@@ -660,4 +666,18 @@ import Layout from '../layouts/Layout.astro';
   .btn-add-domain { background: #10b981 !important; color: #fff !important; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; height: 48px; }
   .btn-add-domain:hover { background: #059669 !important; transform: translateY(-1px); }
   .btn-add-domain:disabled { background: #9ca3af !important; cursor: not-allowed; }
+
+  /* СТИЛЬ ДЛЯ БЕЙДЖИКА ИМЕНИ В ТАБЛИЦЕ */
+  .inline-account-badge {
+    font-size: 0.7rem; 
+    background: #e2e8f0; 
+    color: #2d3748; 
+    padding: 2px 6px; 
+    border-radius: 4px; 
+    margin-left: 8px; 
+    font-weight: 700; 
+    border: 1px solid #cbd5e0; 
+    white-space: nowrap; 
+    vertical-align: middle;
+  }
 </style>
