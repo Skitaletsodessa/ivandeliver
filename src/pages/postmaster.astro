@@ -341,67 +341,53 @@ import Layout from '../layouts/Layout.astro';
     
     let html = '';
 
-    // --- SPAM RATE CHART (UP TO 30 DAYS) ---
-    html += `<div class="details-section"><h3>📉 Spam Rate (History)</h3>`;
+    // --- ОБЪЕДИНЕННЫЙ ГРАФИК SPAM & REPUTATION ---
+    html += `<div class="details-section"><h3>📊 Spam & Reputation History (30 Days)</h3>`;
     try {
-      const history = JSON.parse(row.spam_history || '[]');
-      if (history.length === 0) {
-        html += `<p class="text-gray">No spam history available.</p>`;
+      const spamHistory = JSON.parse(row.spam_history || '[]');
+      const repHistory = JSON.parse(row.rep_history || '[]');
+
+      if (spamHistory.length === 0 && repHistory.length === 0) {
+        html += `<p class="text-gray">No history available.</p>`;
       } else {
-        let bars = '';
-        const maxRate = Math.max(...history.map(h => h.rate), 0.005); 
+        let cols = '';
+        const maxRate = Math.max(...spamHistory.map(h => h.rate), 0.005); 
         
-        history.forEach(h => {
-          const pct = (h.rate * 100).toFixed(2) + '%';
-          const height = Math.min((h.rate / maxRate) * 100, 100) + '%';
-          
-          let color = '#48bb78'; // Green
-          if (h.rate >= 0.003) color = '#e53e3e'; // Red
-          else if (h.rate >= 0.001) color = '#ecc94b'; // Yellow
+        for (let i = 0; i < spamHistory.length; i++) {
+          const s = spamHistory[i];
+          const r = repHistory[i] || { rep: 'UNKNOWN' };
 
-          // Прячем текст для 0%, чтобы график не был перегружен 30 нулями
-          const valText = h.rate > 0 ? `<span class="chart-val" style="color: ${color};">${pct}</span>` : `<span class="chart-val"></span>`;
+          const pct = (s.rate * 100).toFixed(2) + '%';
+          const height = Math.min((s.rate / maxRate) * 100, 100) + '%';
+          let spamColor = '#48bb78'; // Green
+          if (s.rate >= 0.003) spamColor = '#e53e3e'; // Red
+          else if (s.rate >= 0.001) spamColor = '#ecc94b'; // Yellow
 
-          bars += `
-            <div class="chart-bar-wrap">
-              ${valText}
-              <div class="chart-bar" title="${h.date}: ${pct} Spam" style="background-color: ${color}; height: ${height};"></div>
-              <span class="chart-date">${h.date}</span>
+          const valText = s.rate > 0 ? `<span class="chart-val" style="color: ${spamColor};">${pct}</span>` : `<span class="chart-val"></span>`;
+
+          let repColor = '#e2e8f0'; // UNKNOWN
+          if (r.rep === 'HIGH') repColor = '#48bb78';
+          if (r.rep === 'MEDIUM') repColor = '#ecc94b';
+          if (r.rep === 'LOW') repColor = '#ed8936';
+          if (r.rep === 'BAD') repColor = '#e53e3e';
+
+          cols += `
+            <div class="combined-col">
+              <div class="spam-part">
+                ${valText}
+                <div class="chart-bar" title="Spam: ${pct}" style="background-color: ${spamColor}; height: ${height};"></div>
+              </div>
+              <div class="rep-part" title="Reputation: ${r.rep}">
+                <div class="rep-block" style="background-color: ${repColor};"></div>
+              </div>
+              <span class="chart-date">${s.date}</span>
             </div>
           `;
-        });
-        html += `<div class="spam-chart-container">${bars}</div>`;
+        }
+        html += `<div class="combined-chart-container">${cols}</div>`;
       }
     } catch (e) {
       html += `<p class="text-gray">No history data parsed.</p>`;
-    }
-    html += `</div>`;
-
-    // --- DOMAIN REPUTATION CHART (UP TO 30 DAYS) ---
-    html += `<div class="details-section"><h3>🛡️ Domain Reputation (History)</h3>`;
-    try {
-      const repHistory = JSON.parse(row.rep_history || '[]');
-      if (repHistory.length === 0) {
-        html += `<p class="text-gray">No reputation history available.</p>`;
-      } else {
-        let blocks = '';
-        repHistory.forEach(h => {
-          let color = '#e2e8f0'; // UNKNOWN
-          if (h.rep === 'HIGH') color = '#48bb78';
-          if (h.rep === 'MEDIUM') color = '#ecc94b';
-          if (h.rep === 'LOW') color = '#ed8936';
-          if (h.rep === 'BAD') color = '#e53e3e';
-
-          blocks += `
-            <div class="rep-block-wrap">
-              <div class="rep-block" style="background-color: ${color};" title="${h.date}: ${h.rep}"></div>
-            </div>
-          `;
-        });
-        html += `<div class="rep-chart-container">${blocks}</div>`;
-      }
-    } catch (e) {
-      html += `<p class="text-gray">No rep history data parsed.</p>`;
     }
     html += `</div>`;
 
@@ -542,33 +528,38 @@ import Layout from '../layouts/Layout.astro';
   .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
   .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
 
-  .modal { border: none; border-radius: 12px; padding: 0; width: 90%; max-width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); background: #fff; color: #1a202c; }
-  .modal::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); }
+  /* ОБНОВЛЕННЫЕ СТИЛИ МОДАЛЬНОГО ОКНА (ШИРЕ И ВЫШЕ) */
+  .modal { border: none; border-radius: 12px; padding: 0; width: 95%; max-width: 1350px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); background: #fff; color: #1a202c; }
+  .modal::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
   .modal-content { display: flex; flex-direction: column; }
-  .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f7fafc; }
+  .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f7fafc; position: sticky; top: 0; z-index: 10; border-radius: 12px 12px 0 0; }
   .modal-header h2 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #2d3748; }
   .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #a0aec0; transition: 0.2s; }
   .close-btn:hover { color: #1a202c; }
-  .modal-body { padding: 1.5rem; max-height: 60vh; overflow-y: auto; }
-  .details-section { margin-bottom: 1.5rem; }
-  .details-section h3 { margin-top: 0; font-size: 1.05rem; color: #4a5568; border-bottom: 2px solid #edf2f7; padding-bottom: 0.5rem; }
-  .ip-list { font-family: monospace; background: #edf2f7; padding: 10px 15px; border-radius: 6px; font-size: 0.85rem; max-height: 150px; overflow-y: auto; margin-top: 8px; border: 1px solid #e2e8f0; line-height: 1.6; }
-  .error-list { padding-left: 1.2rem; margin: 0; }
-  .error-list li { margin-bottom: 0.5rem; font-size: 0.95rem; }
+  .modal-body { padding: 1.5rem; max-height: 85vh; overflow-y: auto; }
+  .details-section { margin-bottom: 2rem; }
+  .details-section h3 { margin-top: 0; font-size: 1.1rem; color: #2d3748; border-bottom: 2px solid #edf2f7; padding-bottom: 0.75rem; margin-bottom: 1rem; }
+  
+  .ip-list { font-family: monospace; background: #edf2f7; padding: 12px 18px; border-radius: 8px; font-size: 0.85rem; max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid #e2e8f0; line-height: 1.7; color: #2d3748; }
+  .error-list { padding-left: 1.2rem; margin: 0; color: #2d3748; }
+  .error-list li { margin-bottom: 0.75rem; font-size: 0.95rem; }
 
-  /* Обновленные стили для графиков (Скролл для 30 дней) */
-  .spam-chart-container { display: flex; align-items: flex-end; gap: 4px; padding: 10px 0; height: 120px; border-bottom: 1px solid #edf2f7; overflow-x: auto; overflow-y: hidden; }
-  .chart-bar-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; flex: 1; min-width: 25px; }
-  .chart-bar { width: 100%; min-height: 4px; border-radius: 4px 4px 0 0; transition: height 0.4s ease; cursor: pointer; opacity: 0.8; }
-  .chart-bar:hover { opacity: 1; }
-  .chart-val { font-size: 0.65rem; font-weight: bold; margin-bottom: 4px; }
-  .chart-date { font-size: 0.6rem; color: #718096; margin-top: 6px; transform: rotate(-45deg); white-space: nowrap; margin-bottom: 5px; }
-
-  /* Стили для нового графика репутации */
-  .rep-chart-container { display: flex; gap: 4px; padding: 10px 0; overflow-x: auto; }
-  .rep-block-wrap { flex: 1; min-width: 25px; display: flex; justify-content: center; }
-  .rep-block { width: 100%; height: 24px; border-radius: 4px; cursor: pointer; transition: transform 0.2s; }
-  .rep-block:hover { transform: scale(1.1); }
+  /* ОБЪЕДИНЕННЫЙ ГРАФИК (БЕЗ СКРОЛЛА НА ДЕСКТОПЕ) */
+  .combined-chart-container { display: flex; gap: 4px; padding: 10px 0 25px 0; overflow-x: auto; align-items: flex-end; justify-content: center; }
+  
+  /* Чуть шире колонки для лучшей читаемости */
+  .combined-col { display: flex; flex-direction: column; align-items: center; min-width: 40px; flex: 1; max-width: 60px; }
+  
+  .spam-part { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 110px; width: 100%; margin-bottom: 6px; }
+  .chart-bar { width: 100%; min-height: 4px; border-radius: 4px 4px 0 0; transition: height 0.4s ease; opacity: 0.85; cursor: pointer; }
+  .chart-bar:hover { opacity: 1; transform: scaleY(1.02); }
+  .chart-val { font-size: 0.7rem; font-weight: 700; margin-bottom: 4px; position: relative; z-index: 1; }
+  
+  .rep-part { width: 100%; height: 28px; margin-bottom: 10px; }
+  .rep-block { width: 100%; height: 100%; border-radius: 4px; transition: transform 0.2s; cursor: pointer; }
+  .rep-block:hover { transform: scale(1.1); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+  
+  .chart-date { font-size: 0.7rem; color: #4a5568; transform: rotate(-45deg); white-space: nowrap; margin-top: 8px; font-weight: 500; }
 
   .alert-toggle { cursor: pointer; opacity: 0.3; filter: grayscale(100%); transition: all 0.2s ease; font-size: 1.1rem; user-select: none; }
   .alert-toggle:hover { opacity: 0.7; transform: scale(1.1); }
