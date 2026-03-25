@@ -220,7 +220,6 @@ import Layout from '../layouts/Layout.astro';
     tbody.innerHTML = html;
   }
 
-  // Helpers
   function formatSpamRate(rate) {
     if (rate === null || rate === undefined) return `<span class="badge badge-gray">N/A</span>`;
     const pct = (rate * 100).toFixed(2);
@@ -298,23 +297,18 @@ import Layout from '../layouts/Layout.astro';
     event.stopPropagation();
     
     const icon = event.target;
-    if (targetState === 1) {
-      icon.classList.add('active');
-    } else {
-      icon.classList.remove('active');
-    }
+    if (targetState === 1) icon.classList.add('active');
+    else icon.classList.remove('active');
     
     const row = rawData.find(d => d.domain === domain);
     if (row) row.alert_enabled = targetState;
 
     try {
       await fetch(TOGGLE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: domain, enabled: targetState === 1 })
       });
     } catch (e) {
-      console.error("Failed to toggle alert", e);
       if (targetState === 1) icon.classList.remove('active');
       else icon.classList.add('active');
       if (row) row.alert_enabled = targetState === 1 ? 0 : 1;
@@ -324,21 +318,16 @@ import Layout from '../layouts/Layout.astro';
   (window as any).syncSingleDomain = async (domain, event) => {
     event.stopPropagation();
     const btn = event.target;
-    
-    // Включаем анимацию вращения
     btn.classList.add('spinning');
     
     try {
       await fetch(SYNC_SINGLE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: domain })
       });
-      // После успешной синхронизации обновляем всю таблицу
       await init(); 
     } catch (e) {
-      alert("Failed to sync domain: " + domain);
-      console.error(e);
+      alert("Failed to sync domain");
       btn.classList.remove('spinning');
     }
   };
@@ -352,11 +341,12 @@ import Layout from '../layouts/Layout.astro';
     
     let html = '';
 
-    html += `<div class="details-section"><h3>📉 Spam Rate (Last 7 Days)</h3>`;
+    // --- SPAM RATE CHART (UP TO 30 DAYS) ---
+    html += `<div class="details-section"><h3>📉 Spam Rate (History)</h3>`;
     try {
       const history = JSON.parse(row.spam_history || '[]');
       if (history.length === 0) {
-        html += `<p class="text-gray">No history available for the last 7 days.</p>`;
+        html += `<p class="text-gray">No spam history available.</p>`;
       } else {
         let bars = '';
         const maxRate = Math.max(...history.map(h => h.rate), 0.005); 
@@ -369,9 +359,12 @@ import Layout from '../layouts/Layout.astro';
           if (h.rate >= 0.003) color = '#e53e3e'; // Red
           else if (h.rate >= 0.001) color = '#ecc94b'; // Yellow
 
+          // Прячем текст для 0%, чтобы график не был перегружен 30 нулями
+          const valText = h.rate > 0 ? `<span class="chart-val" style="color: ${color};">${pct}</span>` : `<span class="chart-val"></span>`;
+
           bars += `
             <div class="chart-bar-wrap">
-              <span class="chart-val" style="color: ${color};">${pct}</span>
+              ${valText}
               <div class="chart-bar" title="${h.date}: ${pct} Spam" style="background-color: ${color}; height: ${height};"></div>
               <span class="chart-date">${h.date}</span>
             </div>
@@ -384,6 +377,35 @@ import Layout from '../layouts/Layout.astro';
     }
     html += `</div>`;
 
+    // --- DOMAIN REPUTATION CHART (UP TO 30 DAYS) ---
+    html += `<div class="details-section"><h3>🛡️ Domain Reputation (History)</h3>`;
+    try {
+      const repHistory = JSON.parse(row.rep_history || '[]');
+      if (repHistory.length === 0) {
+        html += `<p class="text-gray">No reputation history available.</p>`;
+      } else {
+        let blocks = '';
+        repHistory.forEach(h => {
+          let color = '#e2e8f0'; // UNKNOWN
+          if (h.rep === 'HIGH') color = '#48bb78';
+          if (h.rep === 'MEDIUM') color = '#ecc94b';
+          if (h.rep === 'LOW') color = '#ed8936';
+          if (h.rep === 'BAD') color = '#e53e3e';
+
+          blocks += `
+            <div class="rep-block-wrap">
+              <div class="rep-block" style="background-color: ${color};" title="${h.date}: ${h.rep}"></div>
+            </div>
+          `;
+        });
+        html += `<div class="rep-chart-container">${blocks}</div>`;
+      }
+    } catch (e) {
+      html += `<p class="text-gray">No rep history data parsed.</p>`;
+    }
+    html += `</div>`;
+
+    // --- DELIVERY ERRORS ---
     html += `<div class="details-section"><h3>🛑 Delivery Errors</h3>`;
     try {
       const errors = JSON.parse(row.delivery_errors || '[]');
@@ -403,6 +425,7 @@ import Layout from '../layouts/Layout.astro';
     }
     html += `</div>`;
 
+    // --- IP REPUTATION DETAILED ---
     html += `<div class="details-section"><h3>🌐 IP Reputation (Sample IPs)</h3>`;
     try {
       const ipReps = JSON.parse(row.ip_rep_detailed || '[]');
@@ -456,7 +479,6 @@ import Layout from '../layouts/Layout.astro';
       await init(); 
     } catch (e) {
       alert("Sync failed. Check console.");
-      console.error(e);
     } finally {
       btn.innerHTML = originalText;
       btn.style.opacity = '1';
@@ -520,7 +542,6 @@ import Layout from '../layouts/Layout.astro';
   .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
   .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
 
-  /* Стили модального окна */
   .modal { border: none; border-radius: 12px; padding: 0; width: 90%; max-width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); background: #fff; color: #1a202c; }
   .modal::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); }
   .modal-content { display: flex; flex-direction: column; }
@@ -535,20 +556,24 @@ import Layout from '../layouts/Layout.astro';
   .error-list { padding-left: 1.2rem; margin: 0; }
   .error-list li { margin-bottom: 0.5rem; font-size: 0.95rem; }
 
-  /* Стили для графика Spam Rate */
-  .spam-chart-container { display: flex; align-items: flex-end; gap: 8px; padding: 10px 0; height: 120px; border-bottom: 1px solid #edf2f7; }
-  .chart-bar-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; flex: 1; min-width: 40px; }
+  /* Обновленные стили для графиков (Скролл для 30 дней) */
+  .spam-chart-container { display: flex; align-items: flex-end; gap: 4px; padding: 10px 0; height: 120px; border-bottom: 1px solid #edf2f7; overflow-x: auto; overflow-y: hidden; }
+  .chart-bar-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; flex: 1; min-width: 25px; }
   .chart-bar { width: 100%; min-height: 4px; border-radius: 4px 4px 0 0; transition: height 0.4s ease; cursor: pointer; opacity: 0.8; }
   .chart-bar:hover { opacity: 1; }
-  .chart-val { font-size: 0.75rem; font-weight: bold; margin-bottom: 4px; }
-  .chart-date { font-size: 0.7rem; color: #718096; margin-top: 6px; }
+  .chart-val { font-size: 0.65rem; font-weight: bold; margin-bottom: 4px; }
+  .chart-date { font-size: 0.6rem; color: #718096; margin-top: 6px; transform: rotate(-45deg); white-space: nowrap; margin-bottom: 5px; }
 
-  /* Стили для колокольчика алертов */
+  /* Стили для нового графика репутации */
+  .rep-chart-container { display: flex; gap: 4px; padding: 10px 0; overflow-x: auto; }
+  .rep-block-wrap { flex: 1; min-width: 25px; display: flex; justify-content: center; }
+  .rep-block { width: 100%; height: 24px; border-radius: 4px; cursor: pointer; transition: transform 0.2s; }
+  .rep-block:hover { transform: scale(1.1); }
+
   .alert-toggle { cursor: pointer; opacity: 0.3; filter: grayscale(100%); transition: all 0.2s ease; font-size: 1.1rem; user-select: none; }
   .alert-toggle:hover { opacity: 0.7; transform: scale(1.1); }
   .alert-toggle.active { opacity: 1; filter: none; text-shadow: 0 0 8px rgba(236, 201, 75, 0.6); }
   
-  /* Кнопка точечной синхронизации */
   .sync-single-btn { cursor: pointer; opacity: 0.4; font-size: 1rem; transition: all 0.2s ease; user-select: none; }
   .sync-single-btn:hover { opacity: 1; transform: scale(1.1); }
   .sync-single-btn.spinning { animation: spin 1s linear infinite; opacity: 1; pointer-events: none; }
