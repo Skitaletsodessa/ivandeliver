@@ -391,4 +391,42 @@ import Layout from '../layouts/Layout.astro';
   .pools-container { display: flex; flex-wrap: wrap; gap: 6px; }
   .pool-tag { background: #e2e8f0; color: #2d3748; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; border: 1px solid #cbd5e0; }
 
+/* --- TOOL NAVIGATION BAR --- */
+  .tool-nav {
+    display: inline-flex;
+    align-items: center;
+    background: #0f172a; /* Темный фон таблетки */
+    padding: 6px;
+    border-radius: 100px;
+    margin-bottom: 2rem;
+    border: 1px solid #334155;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  }
+  .nav-link {
+    color: #94a3b8;
+    text-decoration: none;
+    padding: 8px 20px;
+    border-radius: 100px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-link:hover:not(.active) {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .nav-link.active {
+    background: #3b82f6; /* Синий цвет активного пункта */
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  }
+  .nav-divider {
+    width: 1px;
+    height: 24px;
+    background: #334155;
+    margin: 0 8px;
+  }
 </style>
