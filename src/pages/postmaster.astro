@@ -557,19 +557,29 @@ import Layout from '../layouts/Layout.astro';
     applyFiltersAndRender();
   };
 
-  (window as any).syncPostmaster = async (btn) => {
+(window as any).syncPostmaster = async (btn) => {
     const originalText = btn.innerHTML;
     btn.style.opacity = '0.7';
     btn.style.pointerEvents = 'none';
     
     try {
-      // 1. Вытягиваем свежие данные из DNS (чтобы подтянуть Major Account Names)
-      btn.innerHTML = '⏳ Syncing Clients...';
-      await fetch(SYNC_CLIENTS_URL);
+      // 1. СКАЧИВАЕМ КЛИЕНТОВ ИЗ DNS (Браузер выступает мостом)
+      btn.innerHTML = '⏳ Fetching Clients...';
+      const dnsRes = await fetch('https://checkdns.skitalets-od.workers.dev/api/domains');
+      if (!dnsRes.ok) throw new Error("Failed to fetch from DNS");
+      const dnsData = await dnsRes.json();
 
+      // 2. ОТПРАВЛЯЕМ ИХ В POSTMASTER
+      btn.innerHTML = '⏳ Syncing Clients...';
+      await fetch(SYNC_CLIENTS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dnsData)
+      });
+
+      // 3. ОБНАРУЖЕНИЕ НОВЫХ ДОМЕНОВ В GOOGLE
       btn.innerHTML = '⏳ Discovering...';
       await fetch(DISCOVER_URL);
-      
       await init(); 
       
       const totalDomains = rawData.length;
@@ -578,6 +588,7 @@ import Layout from '../layouts/Layout.astro';
         return;
       }
 
+      // 4. ЗАПУСК БАТЧЕЙ ДЛЯ GOOGLE API
       const batchSize = 50;
       const totalBatches = Math.ceil(totalDomains / batchSize);
 
