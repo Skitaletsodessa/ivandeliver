@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="IP Inventory | ivandeliver.email">
   <main class="domains-wrapper">
-  <nav class="tool-nav">
+    <nav class="tool-nav">
       <a href="/deliverability" class="nav-link back-link">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
         Hub
@@ -13,420 +13,351 @@ import Layout from '../layouts/Layout.astro';
       <a href="/domains" class="nav-link">DNS Monitor</a>
       <a href="/monitor" class="nav-link">SNDS</a>
       <a href="/postmaster" class="nav-link">GPT</a>
-      <a href="/ip-inventory" class="nav-link active">IP Inventory</a> </nav>
+      <a href="/ip-inventory" class="nav-link active">IP Inventory</a>
+    </nav>
+
     <div class="content-header">
       <div class="title-area">
         <h1>Global IP Inventory</h1>
-        <p>Unified dashboard mapping IP pools to Microsoft SNDS status and Google Postmaster reputation.</p>
+        <p>Unified management of IP pools, SNDS health, and Google reputation.</p>
       </div>
       <div class="header-actions">
         <button class="btn-primary" onclick="window.syncData(this)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.44l5.08 5.08"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.44l5.08 5.08"/></svg>
           Refresh Data
         </button>
       </div>
     </div>
 
-    <div class="summary-grid" id="inventory-summary">
-      </div>
+    <div class="summary-grid" id="inventory-summary"></div>
 
-    <div class="table-actions-bar">
-      <div class="left-actions" style="display: flex; gap: 15px; align-items: center;">
-        <input type="text" id="ipSearch" placeholder="Search IP or Hostname..." class="input-field search-input" />
-        
-        <select id="poolFilter" class="input-field select-custom" style="width: 250px;">
-          <option value="ALL">🌐 All Pools</option>
-          </select>
-      </div>
-      
-      <button class="btn-export" onclick="window.downloadCSV()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        Export CSV
-      </button>
+    <div class="view-tabs">
+      <button class="tab-btn active" id="btnViewIps" onclick="window.setView('ips')">IP Addresses</button>
+      <button class="tab-btn" id="btnViewPools" onclick="window.setView('pools')">Pools Management</button>
     </div>
 
-    <div class="card table-outer-container">
-      <div class="table-scroll">
+    <div id="ipsView">
+      <div class="table-actions-bar">
+        <div class="left-actions">
+          <input type="text" id="ipSearch" placeholder="Search IP, Host or Pool..." class="input-field search-input" />
+          <select id="poolFilter" class="input-field select-custom">
+            <option value="ALL">🌐 All Pools</option>
+          </select>
+        </div>
+        <button class="btn-export" onclick="window.downloadCSV()">Export CSV</button>
+      </div>
+
+      <div class="card table-outer-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" onclick="window.sortBy('ip')">IP Address</th>
+                <th class="sortable" onclick="window.sortBy('hostname')">Hostname (PTR)</th>
+                <th>Assigned Pools</th>
+                <th class="center sortable" onclick="window.sortBy('snds_filter')">SNDS</th>
+                <th class="center sortable" onclick="window.sortBy('complaints')">Compl.</th>
+                <th class="center sortable" onclick="window.sortBy('traps')">Traps</th>
+                <th class="center sortable" onclick="window.sortBy('google_rep')">Google Rep</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="poolsView" style="display: none;">
+      <div class="card table-outer-container">
         <table>
           <thead>
             <tr>
-              <th class="sortable" onclick="window.sortBy('ip')">IP Address</th>
-              <th class="sortable" onclick="window.sortBy('hostname')">Hostname (PTR)</th>
-              <th>Assigned Pools</th>
-              <th class="center sortable" onclick="window.sortBy('snds_filter')">SNDS Status</th>
-              <th class="center sortable" onclick="window.sortBy('complaints')">Complaints</th>
-              <th class="center sortable" onclick="window.sortBy('traps')">Traps</th>
-              <th class="center sortable" onclick="window.sortBy('google_rep')">Google Rep</th>
+              <th>Pool Name</th>
+              <th class="center">IP Count</th>
+              <th>IP Addresses in Pool</th>
+              <th class="center">Actions</th>
             </tr>
           </thead>
-          <tbody id="tableBody">
-            <tr><td colspan="7" class="center" style="padding: 40px; color: #a0aec0;">Fetching data from SNDS and Postmaster...</td></tr>
-          </tbody>
+          <tbody id="poolsTableBody"></tbody>
         </table>
       </div>
     </div>
+
+    <dialog id="editIpModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h2 id="editIpTitle">Edit IP Configuration</h2>
+          <button onclick="document.getElementById('editIpModal').close()" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="editIpForm" onsubmit="window.saveIpChanges(event)">
+            <input type="hidden" id="editIpOriginal" />
+            <div class="form-group">
+              <label>Hostname (PTR)</label>
+              <input type="text" id="editHostname" class="input-field" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label>Pool 1</label>
+              <input type="text" id="editPool1" class="input-field" list="poolList" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label>Pool 2</label>
+              <input type="text" id="editPool2" class="input-field" list="poolList" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label>Pool 3</label>
+              <input type="text" id="editPool3" class="input-field" list="poolList" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label>Pool 4</label>
+              <input type="text" id="editPool4" class="input-field" list="poolList" style="width:100%" />
+            </div>
+            <datalist id="poolList"></datalist>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+              <button type="submit" class="btn-primary" style="flex:1">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </dialog>
 
   </main>
 </Layout>
 
 <script>
-  const INVENTORY_URL = 'https://d1-template.skitalets-od.workers.dev/api/inventory';
-  const SNDS_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
-  const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
+  const INV_API = 'https://d1-template.skitalets-od.workers.dev/api/inventory';
+  const IMPORT_API = 'https://d1-template.skitalets-od.workers.dev/api/import-ips';
+  const SNDS_API = 'https://d1-template.skitalets-od.workers.dev/api/data';
+  const PM_API = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   
+  let rawInventory = [];
   let enrichedData = [];
-  let currentFilteredData = [];
-  
-  let sortCol = 'ip';
-  let sortAsc = true;
+  let currentSort = { col: 'ip', asc: true };
   let activePool = 'ALL';
+  let activeStatFilter = 'ALL';
+  let currentView = 'ips';
 
   async function init() {
     try {
-      // 1. Запрашиваем данные из всех трех источников параллельно (максимальная скорость)
-      const [invRes, sndsRes, pmRes] = await Promise.all([
-        fetch(INVENTORY_URL),
-        fetch(SNDS_URL),
-        fetch(POSTMASTER_URL)
-      ]);
-
-      const inventory = await invRes.json();
+      const [invRes, sndsRes, pmRes] = await Promise.all([fetch(INV_API), fetch(SND_API), fetch(PM_API)]);
+      rawInventory = await invRes.json();
       const sndsData = await sndsRes.json();
       const pmData = await pmRes.json();
 
-      // 2. Создаем "Словарь" репутации Google для быстрого поиска по IP
       const googleIpMap = {};
       pmData.forEach(domainRow => {
-        if(domainRow.ip_rep_detailed && domainRow.ip_rep_detailed !== '[]') {
+        if(domainRow.ip_rep_detailed) {
           try {
             const reps = JSON.parse(domainRow.ip_rep_detailed);
             reps.forEach(r => {
-              if(r.sampleIps) {
-                r.sampleIps.forEach(ip => {
-                  // Если IP светится в разных доменах с разной репутацией, берем самую худшую (пессимистичный подход)
-                  if(!googleIpMap[ip] || r.reputation === 'BAD' || r.reputation === 'LOW') {
-                    googleIpMap[ip] = r.reputation;
-                  }
-                });
-              }
+              if(r.sampleIps) r.sampleIps.forEach(ip => {
+                if(!googleIpMap[ip] || r.reputation === 'BAD') googleIpMap[ip] = r.reputation;
+              });
             });
           } catch(e) {}
         }
       });
 
-      // 3. Собираем список всех уникальных пулов для фильтра
-      const allPools = new Set();
-
-      // 4. Обогащаем инвентарь (сливаем 3 базы в одну)
-      enrichedData = inventory.map(item => {
-        // Собираем пулы в один массив, отбрасывая пустые
-        const pools = [item.pool1, item.pool2, item.pool3, item.pool4].filter(p => p && p.trim() !== '');
-        pools.forEach(p => allPools.add(p));
-
-        // Ищем самую свежую запись SNDS для этого IP
-        const sndsRecord = sndsData.find(s => s.ip === item.ip) || {};
-
+      enrichedData = rawInventory.map(item => {
+        const snds = sndsData.find(s => s.ip === item.ip) || {};
         return {
-          ip: item.ip,
-          hostname: item.hostname || '—',
-          pools: pools,
-          snds_filter: sndsRecord.filter_result || 'UNKNOWN',
-          complaints: sndsRecord.complaints || 0,
-          traps: sndsRecord.traps || 0,
-          jmr: sndsRecord.jmr_p1_sender || '',
-          google_rep: googleIpMap[item.ip] || 'UNKNOWN',
-          snds_date: sndsRecord.date || null
+          ...item,
+          pools: [item.pool1, item.pool2, item.pool3, item.pool4].filter(p => p && p.trim() !== ''),
+          snds_filter: snds.filter_result || 'UNKNOWN',
+          complaints: snds.complaints || 0,
+          traps: snds.traps || 0,
+          google_rep: googleIpMap[item.ip] || 'UNKNOWN'
         };
       });
 
-      populatePoolDropdown(Array.from(allPools).sort());
+      updateDatalist();
       applyFiltersAndRender();
-      
-      document.getElementById('ipSearch')?.addEventListener('input', applyFiltersAndRender);
-      document.getElementById('poolFilter')?.addEventListener('change', (e) => {
-        activePool = (e.target as HTMLSelectElement).value;
-        applyFiltersAndRender();
-      });
-
-    } catch (err) {
-      console.error("Data Merge Error:", err);
-      document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" class="center error-text" style="color:#e53e3e;">Error compiling inventory data. Check console.</td></tr>`;
-    }
-  }
-
-  function populatePoolDropdown(pools) {
-    const select = document.getElementById('poolFilter');
-    if (!select) return;
-    
-    // Сохраняем опцию ALL, удаляем остальные
-    select.innerHTML = '<option value="ALL">🌐 All Pools</option>';
-    pools.forEach(pool => {
-      select.innerHTML += `<option value="${pool}">${pool}</option>`;
-    });
+    } catch (err) { console.error(err); }
   }
 
   function applyFiltersAndRender() {
-    const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
+    const search = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
     let filtered = enrichedData.filter(d => {
-      const matchSearch = d.ip.toLowerCase().includes(searchTerm) || d.hostname.toLowerCase().includes(searchTerm);
-      const matchPool = activePool === 'ALL' ? true : d.pools.includes(activePool);
-      return matchSearch && matchPool;
-    });
-
-    // Сортировка
-    filtered.sort((a, b) => {
-      let valA = a[sortCol];
-      let valB = b[sortCol];
-
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortAsc ? valA - valB : valB - valA;
-      }
+      const matchSearch = d.ip.toLowerCase().includes(search) || 
+                          d.hostname.toLowerCase().includes(search) ||
+                          d.pools.some(p => p.toLowerCase().includes(search));
       
-      // Сортировка IP адресов (улучшенная, чтобы 10.0.0.2 был перед 10.0.0.10)
-      if (sortCol === 'ip') {
-        const numA = ipToNumber(a.ip);
-        const numB = ipToNumber(b.ip);
-        return sortAsc ? numA - numB : numB - numA;
-      }
+      const matchPool = activePool === 'ALL' ? true : d.pools.includes(activePool);
+      
+      let matchStat = true;
+      if (activeStatFilter === 'RED') matchStat = d.snds_filter === 'RED';
+      if (activeStatFilter === 'TRAPS') matchStat = d.traps > 0;
+      if (activeStatFilter === 'GOOGLE_BAD') matchStat = d.google_rep === 'BAD' || d.google_rep === 'LOW';
 
-      let strA = String(valA).toLowerCase();
-      let strB = String(valB).toLowerCase();
-      if (strA < strB) return sortAsc ? -1 : 1;
-      if (strA > strB) return sortAsc ? 1 : -1;
-      return 0;
+      return matchSearch && matchPool && matchStat;
     });
 
-    currentFilteredData = filtered;
-    renderSummary(filtered); 
-    renderTable(filtered);    
+    // Sort Logic
+    filtered.sort((a, b) => {
+      let valA = a[currentSort.col];
+      let valB = b[currentSort.col];
+      const mod = currentSort.asc ? 1 : -1;
+      if (currentSort.col === 'ip') return (ipToNumber(a.ip) - ipToNumber(b.ip)) * mod;
+      return String(valA).localeCompare(String(valB)) * mod;
+    });
+
+    renderSummary();
+    renderTable(filtered);
+    renderPoolsView();
   }
 
-  // Вспомогательная функция для правильной сортировки IP
-  function ipToNumber(ip) {
-    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-  }
-
-  function renderSummary(data) {
+  function renderSummary() {
     const container = document.getElementById('inventory-summary');
-    if (!container) return;
-    
-    const total = data.length;
-    const sndsRed = data.filter(d => d.snds_filter === 'RED').length;
-    const trapCount = data.filter(d => d.traps > 0).length;
-    const googleBad = data.filter(d => d.google_rep === 'BAD' || d.google_rep === 'LOW').length;
+    const red = enrichedData.filter(d => d.snds_filter === 'RED').length;
+    const traps = enrichedData.filter(d => d.traps > 0).length;
+    const gBad = enrichedData.filter(d => d.google_rep === 'BAD' || d.google_rep === 'LOW').length;
 
     container.innerHTML = `
-      <div class="stat-card info">
-        <span class="stat-label">Total IPs (Filtered)</span>
-        <span class="stat-value">${total}</span>
+      <div class="stat-card info ${activeStatFilter === 'ALL' ? 'active' : ''}" onclick="window.setStatFilter('ALL')">
+        <span class="stat-label">Total IPs</span>
+        <span class="stat-value">${enrichedData.length}</span>
       </div>
-      <div class="stat-card ${sndsRed > 0 ? 'danger' : 'success'}">
-        <span class="stat-label">SNDS: Red Status</span>
-        <span class="stat-value">${sndsRed}</span>
+      <div class="stat-card danger ${activeStatFilter === 'RED' ? 'active' : ''}" onclick="window.setStatFilter('RED')">
+        <span class="stat-label">SNDS: Red</span>
+        <span class="stat-value">${red}</span>
       </div>
-      <div class="stat-card ${trapCount > 0 ? 'warning' : 'success'}">
-        <span class="stat-label">Hitting Traps</span>
-        <span class="stat-value">${trapCount}</span>
+      <div class="stat-card warning ${activeStatFilter === 'TRAPS' ? 'active' : ''}" onclick="window.setStatFilter('TRAPS')">
+        <span class="stat-label">Trap Hits</span>
+        <span class="stat-value">${traps}</span>
       </div>
-      <div class="stat-card ${googleBad > 0 ? 'danger-light' : 'success'}">
-        <span class="stat-label">Google: Bad/Low</span>
-        <span class="stat-value">${googleBad}</span>
+      <div class="stat-card danger-light ${activeStatFilter === 'GOOGLE_BAD' ? 'active' : ''}" onclick="window.setStatFilter('GOOGLE_BAD')">
+        <span class="stat-label">Google: Bad</span>
+        <span class="stat-value">${gBad}</span>
       </div>
     `;
   }
 
+  (window as any).setStatFilter = (f) => { activeStatFilter = f; applyFiltersAndRender(); };
+  (window as any).setView = (v) => {
+    currentView = v;
+    document.getElementById('ipsView').style.display = v === 'ips' ? 'block' : 'none';
+    document.getElementById('poolsView').style.display = v === 'pools' ? 'block' : 'none';
+    document.getElementById('btnViewIps').classList.toggle('active', v === 'ips');
+    document.getElementById('btnViewPools').classList.toggle('active', v === 'pools');
+  };
+
   function renderTable(data) {
     const tbody = document.getElementById('tableBody');
-    if (!tbody) return;
-    
-    if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="center" style="padding: 20px;">No IP addresses match your filters.</td></tr>`;
-      return;
-    }
+    tbody.innerHTML = data.map(row => `
+      <tr class="domain-row" onclick="window.editIp('${row.ip}')" style="cursor:pointer">
+        <td><strong>${row.ip}</strong></td>
+        <td class="text-gray">${row.hostname}</td>
+        <td>${row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')}</td>
+        <td class="center"><span class="badge ${row.snds_filter.toLowerCase()}">${row.snds_filter}</span></td>
+        <td class="center">${row.complaints}%</td>
+        <td class="center">${row.traps > 0 ? '🚨 '+row.traps : '0'}</td>
+        <td class="center"><span class="badge ${row.google_rep.toLowerCase()}">${row.google_rep}</span></td>
+      </tr>
+    `).join('');
+  }
 
-    let html = '';
-    data.forEach(row => {
-      
-      const poolBadges = row.pools.length > 0 
-        ? row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
-        : `<span class="text-gray">—</span>`;
-
-      // Подсветка строки, если есть серьезные проблемы
-      const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
-
-      html += `
-        <tr class="domain-row ${isCritical ? 'row-alert' : ''}">
-          <td class="domain-text"><strong>${row.ip}</strong></td>
-          <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568;">${row.hostname}</td>
-          <td><div class="pools-container">${poolBadges}</div></td>
-          <td class="center">${formatSNDS(row.snds_filter)}</td>
-          <td class="center" style="${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
-          <td class="center" style="${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
-          <td class="center">${formatGoogleRep(row.google_rep)}</td>
-        </tr>
-      `;
+  function renderPoolsView() {
+    const poolMap = {};
+    enrichedData.forEach(d => {
+      d.pools.forEach(p => {
+        if(!poolMap[p]) poolMap[p] = [];
+        poolMap[p].push(d.ip);
+      });
     });
-    tbody.innerHTML = html;
+
+    const tbody = document.getElementById('poolsTableBody');
+    tbody.innerHTML = Object.entries(poolMap).sort().map(([name, ips]) => `
+      <tr>
+        <td><strong>${name}</strong></td>
+        <td class="center"><span class="count-badge">${ips.length}</span></td>
+        <td style="font-size: 0.8rem; line-height:1.4">${ips.join(', ')}</td>
+        <td class="center">
+          <button class="btn-copy" onclick="window.filterByPool('${name}')">View Pool</button>
+        </td>
+      </tr>
+    `).join('');
   }
 
-  function formatSNDS(status) {
-    if (!status || status === 'UNKNOWN') return `<span class="badge badge-gray">UNKNOWN</span>`;
-    let cls = 'badge-green';
-    if (status === 'YELLOW') cls = 'badge-yellow';
-    if (status === 'RED') cls = 'badge-red';
-    return `<span class="badge ${cls}">${status}</span>`;
-  }
-
-  function formatGoogleRep(rep) {
-    if (!rep || rep === 'UNKNOWN') return `<span class="badge badge-gray">UNKNOWN</span>`;
-    let cls = 'badge-gray';
-    if (rep === 'HIGH') cls = 'badge-green';
-    if (rep === 'MEDIUM') cls = 'badge-yellow';
-    if (rep === 'LOW' || rep === 'BAD') cls = 'badge-red';
-    return `<span class="badge ${cls}">${rep}</span>`;
-  }
-
-  (window as any).sortBy = (col) => {
-    if (sortCol === col) sortAsc = !sortAsc;
-    else { sortCol = col; sortAsc = true; }
-    applyFiltersAndRender();
+  (window as any).editIp = (ip) => {
+    const d = enrichedData.find(x => x.ip === ip);
+    (document.getElementById('editIpOriginal') as HTMLInputElement).value = ip;
+    (document.getElementById('editHostname') as HTMLInputElement).value = d.hostname;
+    (document.getElementById('editPool1') as HTMLInputElement).value = d.pool1 || '';
+    (document.getElementById('editPool2') as HTMLInputElement).value = d.pool2 || '';
+    (document.getElementById('editPool3') as HTMLInputElement).value = d.pool3 || '';
+    (document.getElementById('editPool4') as HTMLInputElement).value = d.pool4 || '';
+    (document.getElementById('editIpModal') as HTMLDialogElement).showModal();
   };
 
-  (window as any).syncData = async (btn) => {
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Refreshing...';
-    btn.disabled = true;
-    await init();
-    btn.innerHTML = originalText;
-    btn.disabled = false;
+  (window as any).saveIpChanges = async (e) => {
+    e.preventDefault();
+    const ip = (document.getElementById('editIpOriginal') as HTMLInputElement).value;
+    const payload = {
+      ip: ip,
+      hostname: (document.getElementById('editHostname') as HTMLInputElement).value,
+      pool1: (document.getElementById('editPool1') as HTMLInputElement).value,
+      pool2: (document.getElementById('editPool2') as HTMLInputElement).value,
+      pool3: (document.getElementById('editPool3') as HTMLInputElement).value,
+      pool4: (document.getElementById('editPool4') as HTMLInputElement).value
+    };
+
+    try {
+      await fetch(IMPORT_API, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify([payload])
+      });
+      (document.getElementById('editIpModal') as HTMLDialogElement).close();
+      init();
+    } catch(err) { alert("Save failed"); }
   };
 
-  (window as any).downloadCSV = () => {
-    if (currentFilteredData.length === 0) {
-      alert("No data available to export.");
-      return;
-    }
+  function updateDatalist() {
+    const pools = new Set();
+    enrichedData.forEach(d => d.pools.forEach(p => pools.add(p)));
+    const list = document.getElementById('poolList');
+    list.innerHTML = Array.from(pools).map(p => `<option value="${p}">`).join('');
     
-    const headers = ['IP Address', 'Hostname', 'Pools', 'SNDS Status', 'Complaints %', 'Traps', 'JMR Incident', 'Google Rep', 'Last SNDS Update'];
-    const rows = currentFilteredData.map(d => [
-      d.ip,
-      d.hostname,
-      `"${d.pools.join(', ')}"`, // Заворачиваем в кавычки, чтобы запятые пулов не сломали CSV
-      d.snds_filter,
-      d.complaints,
-      d.traps,
-      d.jmr,
-      d.google_rep,
-      d.snds_date || 'N/A'
-    ]);
-    
-    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `ip_inventory_${activePool.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    const filter = document.getElementById('poolFilter');
+    filter.innerHTML = '<option value="ALL">🌐 All Pools</option>' + 
+      Array.from(pools).sort().map(p => `<option value="${p}">${p}</option>`).join('');
+  }
+
+  function ipToNumber(ip) { return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0; }
+  (window as any).sortBy = (c) => { currentSort.asc = (currentSort.col === c) ? !currentSort.asc : true; currentSort.col = c; applyFiltersAndRender(); };
+  (window as any).filterByPool = (p) => { activePool = p; (document.getElementById('poolFilter') as HTMLSelectElement).value = p; window.setView('ips'); applyFiltersAndRender(); };
 
   init();
 </script>
 
 <style is:global>
+  /* [cite: 535-550] Styles from provided snippets */
   .domains-wrapper { padding: 2rem; max-width: 1400px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; }
-  .content-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
-  .title-area h1 { font-size: 2.25rem; font-weight: 800; color: #ffffff !important; margin: 0; }
-  .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
+  .tool-nav { display: inline-flex; align-items: center; background: #0f172a; padding: 6px; border-radius: 100px; margin-bottom: 2rem; border: 1px solid #334155; }
   
-  .header-actions { display: flex; gap: 15px; }
-  .btn-primary { display: flex; align-items: center; gap: 8px; background: #3182ce; color: #fff; padding: 12px 24px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
-  .btn-primary:hover { background: #2b6cb0; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-  
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  
-  .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-  .stat-card.danger { border-left: 6px solid #e53e3e !important; }
-  .stat-card.danger-light { border-left: 6px solid #ed8936 !important; } 
-  .stat-card.warning { border-left: 6px solid #ecc94b !important; } 
-  .stat-card.success { border-left: 6px solid #48bb78 !important; }
-  .stat-card.info { border-left: 6px solid #3182ce !important; }
-  
-  .stat-label { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; display: block; margin-bottom: 4px; }
-  .stat-value { font-size: 2.5rem; font-weight: 900; color: #1a202c !important; line-height: 1.1; }
+  .view-tabs { display: flex; gap: 10px; margin-bottom: 2rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
+  .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: 0.2s; }
+  .tab-btn.active { background: #3182ce; color: #fff; }
 
-  .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
-  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; }
-  .search-input { width: 300px; }
-  .select-custom { cursor: pointer; border-color: #a0aec0; }
-  
-  .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; border: none; background: #2d3748; color: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-  .btn-export:hover { background: #4a5568; transform: translateY(-1px); }
+  .stat-card { cursor: pointer; transition: 0.2s; border: 2px solid transparent !important; }
+  .stat-card:hover { transform: translateY(-3px); }
+  .stat-card.active { border-color: #3182ce !important; background: #f0f7ff !important; }
 
-  .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
-  .table-scroll { max-height: 70vh; overflow-y: auto; }
+  .pool-tag { background: #e2e8f0; color: #2d3748; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; border: 1px solid #cbd5e0; margin-right: 4px; }
+  .count-badge { background: #3182ce; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; }
   
-  table { width: 100%; border-collapse: separate; border-spacing: 0; }
-  thead th { position: sticky; top: 0; background: #f7fafc !important; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; padding: 16px 12px; border-bottom: 2px solid #cbd5e0; color: #1a202c !important; text-align: left; z-index: 5; }
-  .sortable { cursor: pointer; user-select: none; }
-  .sortable:hover { background: #edf2f7 !important; }
+  .form-group { margin-bottom: 15px; }
+  .form-group label { display: block; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568; margin-bottom: 5px; }
   
-  td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; color: #2d3748 !important; }
-  .domain-row:hover { background-color: #f8fafc !important; }
-  .row-alert { background-color: #fff5f5 !important; }
+  /* [cite: 564-580] Modal and Table Styles */
+  .modal { border: none; border-radius: 12px; padding: 0; background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .modal-header { padding: 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .modal-body { padding: 1.5rem; }
   
-  .center { text-align: center; }
-  .domain-text strong { font-size: 1.05rem; }
-  .text-gray { color: #a0aec0 !important; }
-
-  .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 900; }
-  .badge-green { background: #c6f6d5 !important; color: #22543d !important; }
-  .badge-red { background: #fed7d7 !important; color: #822727 !important; }
-  .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
-  .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
-
-  .pools-container { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pool-tag { background: #e2e8f0; color: #2d3748; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; border: 1px solid #cbd5e0; }
-
-/* --- TOOL NAVIGATION BAR --- */
-  .tool-nav {
-    display: inline-flex;
-    align-items: center;
-    background: #0f172a; /* Темный фон таблетки */
-    padding: 6px;
-    border-radius: 100px;
-    margin-bottom: 2rem;
-    border: 1px solid #334155;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-  }
-  .nav-link {
-    color: #94a3b8;
-    text-decoration: none;
-    padding: 8px 20px;
-    border-radius: 100px;
-    font-weight: 700;
-    font-size: 0.95rem;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .nav-link:hover:not(.active) {
-    color: #f8fafc;
-    background: rgba(255, 255, 255, 0.05);
-  }
-  .nav-link.active {
-    background: #3b82f6; /* Синий цвет активного пункта */
-    color: #ffffff;
-    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-  }
-  .nav-divider {
-    width: 1px;
-    height: 24px;
-    background: #334155;
-    margin: 0 8px;
-  }
+  .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; }
+  .badge.red { background: #fed7d7; color: #822727; }
+  .badge.green { background: #c6f6d5; color: #22543d; }
+  .badge.yellow { background: #feebc8; color: #744210; }
+  .badge.unknown { background: #edf2f7; color: #4a5568; }
 </style>
