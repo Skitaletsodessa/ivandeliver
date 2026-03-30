@@ -4,6 +4,16 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="DNS Health Check | ivandeliver.email">
   <main class="domains-wrapper">
+  <nav class="tool-nav">
+      <a href="/deliverability" class="nav-link back-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+        Hub
+      </a>
+      <div class="nav-divider"></div>
+      <a href="/domains" class="nav-link">DNS Monitor active</a>
+      <a href="/monitor" class="nav-link">SNDS</a>
+      <a href="/postmaster" class="nav-link">GPT</a>
+      <a href="/ip-inventory" class="nav-link">IP Inventory</a> </nav>
     <div class="content-header">
       <div class="title-area">
         <h1>DNS Health Monitor</h1>
@@ -723,5 +733,43 @@ import Layout from '../layouts/Layout.astro';
     border: 1px solid #cbd5e0; 
     white-space: nowrap; 
     vertical-align: middle;
+  }
+  /* --- TOOL NAVIGATION BAR --- */
+  .tool-nav {
+    display: inline-flex;
+    align-items: center;
+    background: #0f172a; /* Темный фон таблетки */
+    padding: 6px;
+    border-radius: 100px;
+    margin-bottom: 2rem;
+    border: 1px solid #334155;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  }
+  .nav-link {
+    color: #94a3b8;
+    text-decoration: none;
+    padding: 8px 20px;
+    border-radius: 100px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-link:hover:not(.active) {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .nav-link.active {
+    background: #3b82f6; /* Синий цвет активного пункта */
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  }
+  .nav-divider {
+    width: 1px;
+    height: 24px;
+    background: #334155;
+    margin: 0 8px;
   }
 </style>
