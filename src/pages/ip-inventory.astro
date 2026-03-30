@@ -30,47 +30,118 @@ import Layout from '../layouts/Layout.astro';
     <div class="summary-grid" id="inventory-summary">
       </div>
 
-    <div class="table-actions-bar">
-      <div class="left-actions" style="display: flex; gap: 15px; align-items: center;">
-        <input type="text" id="ipSearch" placeholder="Search IP or Hostname..." class="input-field search-input" />
-        
-        <select id="poolFilter" class="input-field select-custom" style="width: 250px;">
-          <option value="ALL">🌐 All Pools</option>
-          </select>
-      </div>
-      
-      <button class="btn-export" onclick="window.downloadCSV()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        Export CSV
-      </button>
+    <div class="view-tabs">
+      <button class="tab-btn active" id="btnViewIps" onclick="window.setView('ips')">IP Addresses</button>
+      <button class="tab-btn" id="btnViewPools" onclick="window.setView('pools')">Pools Management</button>
     </div>
 
-    <div class="card table-outer-container">
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th class="sortable" onclick="window.sortBy('ip')">IP Address</th>
-              <th class="sortable" onclick="window.sortBy('hostname')">Hostname (PTR)</th>
-              <th>Assigned Pools</th>
-              <th class="center sortable" onclick="window.sortBy('snds_filter')">SNDS Status</th>
-              <th class="center sortable" onclick="window.sortBy('complaints')">Complaints</th>
-              <th class="center sortable" onclick="window.sortBy('traps')">Traps</th>
-              <th class="center sortable" onclick="window.sortBy('google_rep')">Google Rep</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody">
-            <tr><td colspan="7" class="center" style="padding: 40px; color: #a0aec0;">Fetching data from SNDS and Postmaster...</td></tr>
-          </tbody>
-        </table>
+    <div id="ipsView">
+      <div class="table-actions-bar">
+        <div class="left-actions" style="display: flex; gap: 15px; align-items: center;">
+          <input type="text" id="ipSearch" placeholder="Search IP, Host or Pool..." class="input-field search-input" />
+          
+          <select id="poolFilter" class="input-field select-custom" style="width: 250px;">
+            <option value="ALL">🌐 All Pools</option>
+          </select>
+        </div>
+        
+        <button class="btn-export" onclick="window.downloadCSV()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Export CSV
+        </button>
+      </div>
+
+      <div class="card table-outer-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" onclick="window.sortBy('ip')">IP Address</th>
+                <th class="sortable" onclick="window.sortBy('hostname')">Hostname (PTR)</th>
+                <th>Assigned Pools</th>
+                <th class="center sortable" onclick="window.sortBy('snds_filter')">SNDS Status</th>
+                <th class="center sortable" onclick="window.sortBy('complaints')">Complaints</th>
+                <th class="center sortable" onclick="window.sortBy('traps')">Traps</th>
+                <th class="center sortable" onclick="window.sortBy('google_rep')">Google Rep</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr><td colspan="7" class="center" style="padding: 40px; color: #a0aec0;">Fetching data from SNDS and Postmaster...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
+
+    <div id="poolsView" style="display: none;">
+      <div class="card table-outer-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Pool Name</th>
+                <th class="center">IP Count</th>
+                <th>Assigned IP Addresses</th>
+                <th class="center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="poolsTableBody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <dialog id="editIpModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="editModalTitle">Edit IP Configuration</h2>
+          <button onclick="document.getElementById('editIpModal').close()" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="editIpForm" onsubmit="window.saveIpChanges(event)">
+            <input type="hidden" id="editIpAddress" />
+            
+            <div class="form-group">
+              <label>Hostname (PTR)</label>
+              <input type="text" id="editHostname" class="input-field" style="width: 100%; box-sizing: border-box;" />
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+              <div class="form-group">
+                <label>Pool 1</label>
+                <input type="text" id="editPool1" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+              </div>
+              <div class="form-group">
+                <label>Pool 2</label>
+                <input type="text" id="editPool2" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+              </div>
+              <div class="form-group">
+                <label>Pool 3</label>
+                <input type="text" id="editPool3" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+              </div>
+              <div class="form-group">
+                <label>Pool 4</label>
+                <input type="text" id="editPool4" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+              </div>
+            </div>
+
+            <datalist id="poolList"></datalist>
+
+            <button type="submit" class="btn-primary btn-block" style="margin-top: 20px; padding: 14px;">
+              Save Configuration
+            </button>
+          </form>
+        </div>
+      </div>
+    </dialog>
 
   </main>
 </Layout>
 
 <script>
   const INVENTORY_URL = 'https://d1-template.skitalets-od.workers.dev/api/inventory';
+  const IMPORT_URL = 'https://d1-template.skitalets-od.workers.dev/api/import-ips';
   const SNDS_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
   const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   
@@ -80,10 +151,11 @@ import Layout from '../layouts/Layout.astro';
   let sortCol = 'ip';
   let sortAsc = true;
   let activePool = 'ALL';
+  let activeStatFilter = 'ALL'; // Для кликабельных карточек
 
   async function init() {
     try {
-      // 1. Запрашиваем данные из всех трех источников параллельно (максимальная скорость)
+      // 1. Запрашиваем данные из всех трех источников параллельно
       const [invRes, sndsRes, pmRes] = await Promise.all([
         fetch(INVENTORY_URL),
         fetch(SNDS_URL),
@@ -94,7 +166,7 @@ import Layout from '../layouts/Layout.astro';
       const sndsData = await sndsRes.json();
       const pmData = await pmRes.json();
 
-      // 2. Создаем "Словарь" репутации Google для быстрого поиска по IP
+      // 2. Создаем "Словарь" репутации Google
       const googleIpMap = {};
       pmData.forEach(domainRow => {
         if(domainRow.ip_rep_detailed && domainRow.ip_rep_detailed !== '[]') {
@@ -103,7 +175,6 @@ import Layout from '../layouts/Layout.astro';
             reps.forEach(r => {
               if(r.sampleIps) {
                 r.sampleIps.forEach(ip => {
-                  // Если IP светится в разных доменах с разной репутацией, берем самую худшую (пессимистичный подход)
                   if(!googleIpMap[ip] || r.reputation === 'BAD' || r.reputation === 'LOW') {
                     googleIpMap[ip] = r.reputation;
                   }
@@ -114,19 +185,18 @@ import Layout from '../layouts/Layout.astro';
         }
       });
 
-      // 3. Собираем список всех уникальных пулов для фильтра
+      // 3. Собираем список всех уникальных пулов
       const allPools = new Set();
 
-      // 4. Обогащаем инвентарь (сливаем 3 базы в одну)
+      // 4. Обогащаем инвентарь
       enrichedData = inventory.map(item => {
-        // Собираем пулы в один массив, отбрасывая пустые
         const pools = [item.pool1, item.pool2, item.pool3, item.pool4].filter(p => p && p.trim() !== '');
         pools.forEach(p => allPools.add(p));
 
-        // Ищем самую свежую запись SNDS для этого IP
         const sndsRecord = sndsData.find(s => s.ip === item.ip) || {};
 
         return {
+          ...item, // Сохраняем оригинальные pool1..pool4 для редактирования
           ip: item.ip,
           hostname: item.hostname || '—',
           pools: pools,
@@ -139,7 +209,7 @@ import Layout from '../layouts/Layout.astro';
         };
       });
 
-      populatePoolDropdown(Array.from(allPools).sort());
+      populatePoolDropdowns(Array.from(allPools).sort());
       applyFiltersAndRender();
       
       document.getElementById('ipSearch')?.addEventListener('input', applyFiltersAndRender);
@@ -154,28 +224,46 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  function populatePoolDropdown(pools) {
+  function populatePoolDropdowns(pools) {
     const select = document.getElementById('poolFilter');
-    if (!select) return;
+    const dataList = document.getElementById('poolList');
+    if (!select || !dataList) return;
     
-    // Сохраняем опцию ALL, удаляем остальные
     select.innerHTML = '<option value="ALL">🌐 All Pools</option>';
+    dataList.innerHTML = '';
+
     pools.forEach(pool => {
       select.innerHTML += `<option value="${pool}">${pool}</option>`;
+      dataList.innerHTML += `<option value="${pool}">`;
     });
   }
 
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
-    let filtered = enrichedData.filter(d => {
-      const matchSearch = d.ip.toLowerCase().includes(searchTerm) || d.hostname.toLowerCase().includes(searchTerm);
+    // Сначала фильтруем только по тексту и пулу (чтобы карточки показывали правильную стату для пула)
+    let searchFiltered = enrichedData.filter(d => {
+      const matchSearch = d.ip.toLowerCase().includes(searchTerm) || 
+                          d.hostname.toLowerCase().includes(searchTerm) ||
+                          d.pools.some(p => p.toLowerCase().includes(searchTerm)); // Ищем по пулам!
+                          
       const matchPool = activePool === 'ALL' ? true : d.pools.includes(activePool);
       return matchSearch && matchPool;
     });
 
+    renderSummary(searchFiltered); // Рисуем статистику на базе поиска
+
+    // Затем применяем фильтр карточек к таблице
+    let tableFiltered = searchFiltered.filter(d => {
+      if (activeStatFilter === 'ALL') return true;
+      if (activeStatFilter === 'RED') return d.snds_filter === 'RED';
+      if (activeStatFilter === 'TRAPS') return d.traps > 0;
+      if (activeStatFilter === 'GOOGLE_BAD') return d.google_rep === 'BAD' || d.google_rep === 'LOW';
+      return true;
+    });
+
     // Сортировка
-    filtered.sort((a, b) => {
+    tableFiltered.sort((a, b) => {
       let valA = a[sortCol];
       let valB = b[sortCol];
 
@@ -183,7 +271,6 @@ import Layout from '../layouts/Layout.astro';
         return sortAsc ? valA - valB : valB - valA;
       }
       
-      // Сортировка IP адресов (улучшенная, чтобы 10.0.0.2 был перед 10.0.0.10)
       if (sortCol === 'ip') {
         const numA = ipToNumber(a.ip);
         const numB = ipToNumber(b.ip);
@@ -197,9 +284,9 @@ import Layout from '../layouts/Layout.astro';
       return 0;
     });
 
-    currentFilteredData = filtered;
-    renderSummary(filtered); 
-    renderTable(filtered);    
+    currentFilteredData = tableFiltered;
+    renderTable(tableFiltered);
+    renderPoolsView(searchFiltered); // Рисуем вкладку пулов
   }
 
   // Вспомогательная функция для правильной сортировки IP
@@ -216,20 +303,22 @@ import Layout from '../layouts/Layout.astro';
     const trapCount = data.filter(d => d.traps > 0).length;
     const googleBad = data.filter(d => d.google_rep === 'BAD' || d.google_rep === 'LOW').length;
 
+    const getActiveCls = (filter) => activeStatFilter === filter ? 'active-filter' : '';
+
     container.innerHTML = `
-      <div class="stat-card info">
-        <span class="stat-label">Total IPs (Filtered)</span>
+      <div class="stat-card info ${getActiveCls('ALL')}" onclick="window.setStatFilter('ALL')">
+        <span class="stat-label">Total IPs</span>
         <span class="stat-value">${total}</span>
       </div>
-      <div class="stat-card ${sndsRed > 0 ? 'danger' : 'success'}">
+      <div class="stat-card ${sndsRed > 0 ? 'danger' : 'success'} ${getActiveCls('RED')}" onclick="window.setStatFilter('RED')">
         <span class="stat-label">SNDS: Red Status</span>
         <span class="stat-value">${sndsRed}</span>
       </div>
-      <div class="stat-card ${trapCount > 0 ? 'warning' : 'success'}">
+      <div class="stat-card ${trapCount > 0 ? 'warning' : 'success'} ${getActiveCls('TRAPS')}" onclick="window.setStatFilter('TRAPS')">
         <span class="stat-label">Hitting Traps</span>
         <span class="stat-value">${trapCount}</span>
       </div>
-      <div class="stat-card ${googleBad > 0 ? 'danger-light' : 'success'}">
+      <div class="stat-card ${googleBad > 0 ? 'danger-light' : 'success'} ${getActiveCls('GOOGLE_BAD')}" onclick="window.setStatFilter('GOOGLE_BAD')">
         <span class="stat-label">Google: Bad/Low</span>
         <span class="stat-value">${googleBad}</span>
       </div>
@@ -247,16 +336,15 @@ import Layout from '../layouts/Layout.astro';
 
     let html = '';
     data.forEach(row => {
-      
       const poolBadges = row.pools.length > 0 
         ? row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
         : `<span class="text-gray">—</span>`;
 
-      // Подсветка строки, если есть серьезные проблемы
       const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
 
+      // Строка теперь кликабельная для редактирования
       html += `
-        <tr class="domain-row ${isCritical ? 'row-alert' : ''}">
+        <tr class="domain-row ${isCritical ? 'row-alert' : ''}" onclick="window.openEditModal('${row.ip}')" title="Click to edit IP Configuration">
           <td class="domain-text"><strong>${row.ip}</strong></td>
           <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568;">${row.hostname}</td>
           <td><div class="pools-container">${poolBadges}</div></td>
@@ -267,6 +355,41 @@ import Layout from '../layouts/Layout.astro';
         </tr>
       `;
     });
+    tbody.innerHTML = html;
+  }
+
+  function renderPoolsView(data) {
+    const poolMap = {};
+    
+    // Группируем IP по пулам
+    data.forEach(d => {
+      d.pools.forEach(p => {
+        if(!poolMap[p]) poolMap[p] = [];
+        poolMap[p].push(d.ip);
+      });
+    });
+
+    const tbody = document.getElementById('poolsTableBody');
+    if (!tbody) return;
+
+    let html = '';
+    Object.keys(poolMap).sort().forEach(poolName => {
+      const ips = poolMap[poolName];
+      html += `
+        <tr class="domain-row">
+          <td><strong style="font-size: 1.1rem; color: #2d3748;">${poolName}</strong></td>
+          <td class="center"><span class="badge badge-gray" style="font-size: 0.9rem;">${ips.length} IPs</span></td>
+          <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568; line-height: 1.5;">${ips.join(', ')}</td>
+          <td class="center">
+            <button class="btn-export" style="padding: 6px 12px; font-size: 0.8rem; background: #3182ce;" onclick="window.jumpToPool('${poolName}')">
+              Manage IPs
+            </button>
+          </td>
+        </tr>
+      `;
+    });
+    
+    if (html === '') html = `<tr><td colspan="4" class="center" style="padding: 20px;">No pools found.</td></tr>`;
     tbody.innerHTML = html;
   }
 
@@ -287,10 +410,85 @@ import Layout from '../layouts/Layout.astro';
     return `<span class="badge ${cls}">${rep}</span>`;
   }
 
+  // --- ИНТЕРАКТИВНЫЕ ФУНКЦИИ ---
+
   (window as any).sortBy = (col) => {
     if (sortCol === col) sortAsc = !sortAsc;
     else { sortCol = col; sortAsc = true; }
     applyFiltersAndRender();
+  };
+
+  (window as any).setStatFilter = (filter) => {
+    activeStatFilter = filter;
+    applyFiltersAndRender();
+  };
+
+  (window as any).setView = (viewName) => {
+    document.getElementById('ipsView').style.display = viewName === 'ips' ? 'block' : 'none';
+    document.getElementById('poolsView').style.display = viewName === 'pools' ? 'block' : 'none';
+    
+    document.getElementById('btnViewIps').classList.toggle('active', viewName === 'ips');
+    document.getElementById('btnViewPools').classList.toggle('active', viewName === 'pools');
+  };
+
+  (window as any).jumpToPool = (poolName) => {
+    // Выбираем пул в дропдауне, сбрасываем фильтры и переключаемся на вкладку IP
+    activePool = poolName;
+    (document.getElementById('poolFilter') as HTMLSelectElement).value = poolName;
+    activeStatFilter = 'ALL';
+    (window as any).setView('ips');
+    applyFiltersAndRender();
+  };
+
+  (window as any).openEditModal = (ip) => {
+    const data = enrichedData.find(d => d.ip === ip);
+    if (!data) return;
+
+    document.getElementById('editModalTitle').innerText = `Edit: ${data.ip}`;
+    (document.getElementById('editIpAddress') as HTMLInputElement).value = data.ip;
+    (document.getElementById('editHostname') as HTMLInputElement).value = data.hostname !== '—' ? data.hostname : '';
+    
+    (document.getElementById('editPool1') as HTMLInputElement).value = data.pool1 || '';
+    (document.getElementById('editPool2') as HTMLInputElement).value = data.pool2 || '';
+    (document.getElementById('editPool3') as HTMLInputElement).value = data.pool3 || '';
+    (document.getElementById('editPool4') as HTMLInputElement).value = data.pool4 || '';
+
+    (document.getElementById('editIpModal') as HTMLDialogElement).showModal();
+  };
+
+  (window as any).saveIpChanges = async (event) => {
+    event.preventDefault();
+    const btn = event.target.querySelector('button[type="submit"]');
+    const originalText = btn.innerText;
+    btn.innerText = '⏳ Saving...';
+    btn.disabled = true;
+
+    const payload = {
+      ip: (document.getElementById('editIpAddress') as HTMLInputElement).value,
+      hostname: (document.getElementById('editHostname') as HTMLInputElement).value,
+      pool1: (document.getElementById('editPool1') as HTMLInputElement).value,
+      pool2: (document.getElementById('editPool2') as HTMLInputElement).value,
+      pool3: (document.getElementById('editPool3') as HTMLInputElement).value,
+      pool4: (document.getElementById('editPool4') as HTMLInputElement).value,
+    };
+
+    try {
+      await fetch(IMPORT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([payload]) // Отправляем как массив, воркер так требует
+      });
+      
+      (document.getElementById('editIpModal') as HTMLDialogElement).close();
+      await init(); // Перезагружаем данные чтобы увидеть изменения
+      
+    } catch (err) {
+      alert("Failed to save changes. Check console.");
+      console.error(err);
+    } finally {
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
   };
 
   (window as any).syncData = async (btn) => {
@@ -312,7 +510,7 @@ import Layout from '../layouts/Layout.astro';
     const rows = currentFilteredData.map(d => [
       d.ip,
       d.hostname,
-      `"${d.pools.join(', ')}"`, // Заворачиваем в кавычки, чтобы запятые пулов не сломали CSV
+      `"${d.pools.join(', ')}"`, // Заворачиваем в кавычки
       d.snds_filter,
       d.complaints,
       d.traps,
@@ -342,13 +540,17 @@ import Layout from '../layouts/Layout.astro';
   .title-area p { color: #a0aec0 !important; font-size: 1.1rem; margin: 0.5rem 0 0 0; }
   
   .header-actions { display: flex; gap: 15px; }
-  .btn-primary { display: flex; align-items: center; gap: 8px; background: #3182ce; color: #fff; padding: 12px 24px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
+  .btn-primary { display: flex; align-items: center; justify-content: center; gap: 8px; background: #3182ce; color: #fff; padding: 12px 24px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
   .btn-primary:hover { background: #2b6cb0; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-block { width: 100%; display: block; text-align: center; }
   
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   
-  .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; cursor: pointer; }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
+  .stat-card.active-filter { border: 2px solid #3182ce !important; background: #f0f7ff !important; transform: translateY(-2px); box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+
   .stat-card.danger { border-left: 6px solid #e53e3e !important; }
   .stat-card.danger-light { border-left: 6px solid #ed8936 !important; } 
   .stat-card.warning { border-left: 6px solid #ecc94b !important; } 
@@ -375,7 +577,8 @@ import Layout from '../layouts/Layout.astro';
   .sortable:hover { background: #edf2f7 !important; }
   
   td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; color: #2d3748 !important; }
-  .domain-row:hover { background-color: #f8fafc !important; }
+  .domain-row { cursor: pointer; transition: background 0.1s ease; }
+  .domain-row:hover { background-color: #edf2f7 !important; }
   .row-alert { background-color: #fff5f5 !important; }
   
   .center { text-align: center; }
@@ -391,11 +594,11 @@ import Layout from '../layouts/Layout.astro';
   .pools-container { display: flex; flex-wrap: wrap; gap: 6px; }
   .pool-tag { background: #e2e8f0; color: #2d3748; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; border: 1px solid #cbd5e0; }
 
-/* --- TOOL NAVIGATION BAR --- */
+  /* --- TOOL NAVIGATION BAR --- */
   .tool-nav {
     display: inline-flex;
     align-items: center;
-    background: #0f172a; /* Темный фон таблетки */
+    background: #0f172a; 
     padding: 6px;
     border-radius: 100px;
     margin-bottom: 2rem;
@@ -419,7 +622,7 @@ import Layout from '../layouts/Layout.astro';
     background: rgba(255, 255, 255, 0.05);
   }
   .nav-link.active {
-    background: #3b82f6; /* Синий цвет активного пункта */
+    background: #3b82f6; 
     color: #ffffff;
     box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
   }
@@ -429,4 +632,23 @@ import Layout from '../layouts/Layout.astro';
     background: #334155;
     margin: 0 8px;
   }
+
+  /* --- VIEW TABS --- */
+  .view-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
+  .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: 0.2s; }
+  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
+
+  /* --- MODAL CSS --- */
+  .modal { border: none; border-radius: 12px; padding: 0; width: 95%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); background: #fff; color: #1a202c; }
+  .modal::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
+  .modal-content { display: flex; flex-direction: column; }
+  .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f7fafc; border-radius: 12px 12px 0 0; }
+  .modal-header h2 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #2d3748; }
+  .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #a0aec0; transition: 0.2s; }
+  .close-btn:hover { color: #1a202c; }
+  .modal-body { padding: 1.5rem; }
+  
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #4a5568; margin-bottom: 6px; }
 </style>
