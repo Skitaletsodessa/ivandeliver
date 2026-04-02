@@ -214,19 +214,20 @@ import Layout from '../layouts/Layout.astro';
   }
 
   // --- ФИНАЛЬНАЯ SYNC ЛОГИКА ---
-  (window as any).syncData = async (btn) => {
+ (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML;
     btn.disabled = true;
+
     try {
       btn.innerHTML = '⏳ 1/4: Fetching GA Lists...';
       const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
       const lists = await listRes.json();
       const ruleIds = lists.rules.map(r => r.id);
-      const ipIds = lists.ips.map(r => r.id);
+      const ipIds = lists.mtas.map(r => r.id);
 
       const mtaNameToPools = {};
       
-      // Глубокий рекурсивный поиск MTA в правилах
+      // Рекурсивный поиск MTA во всех правилах
       const scanRule = (obj, poolName) => {
         if (!obj || typeof obj !== 'object') return;
         if (obj.virtual_mta && obj.virtual_mta.name) {
@@ -237,9 +238,10 @@ import Layout from '../layouts/Layout.astro';
         Object.values(obj).forEach(v => scanRule(v, poolName));
       };
 
-      const chunkSize = 10; // Маленький батч для стабильности
+      const chunkSize = 15;
+      // 2. Синхронизируем Пулы
       for (let i = 0; i < ruleIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 2/4: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
+        btn.innerHTML = `⏳ 2/4: Mapping Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
         const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
           method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: ruleIds.slice(i, i+chunkSize) })
         });
@@ -247,6 +249,7 @@ import Layout from '../layouts/Layout.astro';
         details.forEach(d => { if(d?.success) scanRule(d.data.routing_rule, d.data.routing_rule.name); });
       }
 
+      // 3. Синхронизируем MTA (Virtual MTAs из таблицы IP)
       const updatePayload = [];
       for (let i = 0; i < ipIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 3/4: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
@@ -258,14 +261,18 @@ import Layout from '../layouts/Layout.astro';
           if(!d?.success) return;
           const ipData = d.data.ip_address;
           const pools = mtaNameToPools[ipData.name] ? Array.from(mtaNameToPools[ipData.name]) : [];
+          
           updatePayload.push({
-            name: ipData.name, ip_address: ipData.ip, hostname: ipData.hostname || '—',
-            pools: JSON.stringify(pools), throttling_template: ipData.throttling_template?.name || ''
+            name: ipData.name, // Первичный ключ
+            ip_address: ipData.ip,
+            hostname: ipData.hostname || '—',
+            pools: JSON.stringify(pools),
+            throttling_template: ipData.throttling_template?.name || ''
           });
         });
       }
 
-      // Безопасное сохранение мелкими пачками (по 50)
+      // 4. Сохраняем в D1 мелкими пачками по 50
       for (let i = 0; i < updatePayload.length; i += 50) {
         btn.innerHTML = `⏳ 4/4: Saving... (${Math.min(i+50, updatePayload.length)}/${updatePayload.length})`;
         await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
@@ -274,7 +281,7 @@ import Layout from '../layouts/Layout.astro';
       }
 
       await init();
-    } catch (err) { alert("Sync failed. Check console."); console.error(err); }
+    } catch (err) { console.error(err); alert("Sync failed."); }
     finally { btn.innerHTML = originalText; btn.disabled = false; }
   };
 
