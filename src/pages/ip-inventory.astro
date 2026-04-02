@@ -107,22 +107,22 @@ import Layout from '../layouts/Layout.astro';
               <input type="text" id="editHostname" class="input-field" style="width: 100%; box-sizing: border-box;" />
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
               <div class="form-group">
-                <label>Pool 1</label>
-                <input type="text" id="editPool1" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+                <label>Pool 1 <span style="color: #a0aec0; font-weight: normal; text-transform: none;">(Auto-synced)</span></label>
+                <input type="text" id="editPool1" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box; background: #edf2f7 !important; cursor: not-allowed; color: #718096 !important;" disabled title="Pools are managed automatically via GreenArrow" />
               </div>
               <div class="form-group">
-                <label>Pool 2</label>
-                <input type="text" id="editPool2" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+                <label>Pool 2 <span style="color: #a0aec0; font-weight: normal; text-transform: none;">(Auto-synced)</span></label>
+                <input type="text" id="editPool2" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box; background: #edf2f7 !important; cursor: not-allowed; color: #718096 !important;" disabled title="Pools are managed automatically via GreenArrow" />
               </div>
               <div class="form-group">
-                <label>Pool 3</label>
-                <input type="text" id="editPool3" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+                <label>Pool 3 <span style="color: #a0aec0; font-weight: normal; text-transform: none;">(Auto-synced)</span></label>
+                <input type="text" id="editPool3" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box; background: #edf2f7 !important; cursor: not-allowed; color: #718096 !important;" disabled title="Pools are managed automatically via GreenArrow" />
               </div>
               <div class="form-group">
-                <label>Pool 4</label>
-                <input type="text" id="editPool4" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box;" />
+                <label>Pool 4 <span style="color: #a0aec0; font-weight: normal; text-transform: none;">(Auto-synced)</span></label>
+                <input type="text" id="editPool4" list="poolList" class="input-field" style="width: 100%; box-sizing: border-box; background: #edf2f7 !important; cursor: not-allowed; color: #718096 !important;" disabled title="Pools are managed automatically via GreenArrow" />
               </div>
             </div>
 
@@ -345,9 +345,9 @@ import Layout from '../layouts/Layout.astro';
 
       const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
 
-      // Строка теперь кликабельная для редактирования
+// Строка снова кликабельная
       html += `
-        <tr class="domain-row ${isCritical ? 'row-alert' : ''}" onclick="window.openEditModal('${row.ip}')" title="Click to edit IP Configuration">
+        <tr class="domain-row ${isCritical ? 'row-alert' : ''}" onclick="window.openEditModal('${row.ip}')" title="Click to view/edit configuration">
           <td class="domain-text"><strong>${row.ip}</strong></td>
           <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568;">${row.hostname}</td>
           <td><div class="pools-container">${poolBadges}</div></td>
