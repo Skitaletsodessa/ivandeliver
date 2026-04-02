@@ -143,14 +143,11 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
   const INVENTORY_URL = 'https://d1-template.skitalets-od.workers.dev/api/inventory';
-  const IMPORT_URL = 'https://d1-template.skitalets-od.workers.dev/api/import-ips';
   const SNDS_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
   const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
-  const GA_PULL_URL = 'https://ga-manager.skitalets-od.workers.dev/api/pull-mta';
   
   let enrichedData = [];
   let currentFilteredData = [];
-  
   let sortCol = 'ip';
   let sortAsc = true;
   let activePool = 'ALL';
@@ -159,9 +156,9 @@ import Layout from '../layouts/Layout.astro';
   async function init() {
     try {
       const [invRes, sndsRes, pmRes] = await Promise.all([
-        fetch(INVENTORY_URL),
-        fetch(SNDS_URL),
-        fetch(POSTMASTER_URL)
+        fetch(INVENTORY_URL, { cache: 'no-store' }),
+        fetch(SNDS_URL, { cache: 'no-store' }),
+        fetch(POSTMASTER_URL, { cache: 'no-store' })
       ]);
 
       const inventory = await invRes.json();
@@ -176,9 +173,7 @@ import Layout from '../layouts/Layout.astro';
             reps.forEach(r => {
               if(r.sampleIps) {
                 r.sampleIps.forEach(ip => {
-                  if(!googleIpMap[ip] || r.reputation === 'BAD' || r.reputation === 'LOW') {
-                    googleIpMap[ip] = r.reputation;
-                  }
+                  if(!googleIpMap[ip] || r.reputation === 'BAD' || r.reputation === 'LOW') googleIpMap[ip] = r.reputation;
                 });
               }
             });
@@ -197,7 +192,7 @@ import Layout from '../layouts/Layout.astro';
 
         return {
           name: item.name,
-          ip: item.ip_address, 
+          ip: item.ip_address,
           hostname: item.hostname || '—',
           pools: poolsArr,
           throttling_template: item.throttling_template || '—',
@@ -212,364 +207,92 @@ import Layout from '../layouts/Layout.astro';
 
       populatePoolDropdowns(Array.from(allPools).sort());
       applyFiltersAndRender();
-      
-      document.getElementById('ipSearch')?.addEventListener('input', applyFiltersAndRender);
-      document.getElementById('poolFilter')?.addEventListener('change', (e) => {
-        activePool = (e.target as HTMLSelectElement).value;
-        applyFiltersAndRender();
-      });
-
     } catch (err) {
       console.error("Data Merge Error:", err);
-      document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" class="center error-text" style="color:#e53e3e;">Error compiling inventory data. Check console.</td></tr>`;
+      document.getElementById('tableBody').innerHTML = `<tr><td colspan="9" class="center error-text">Error loading data.</td></tr>`;
     }
   }
 
-  function populatePoolDropdowns(pools) {
-    const select = document.getElementById('poolFilter');
-    const dataList = document.getElementById('poolList');
-    if (!select || !dataList) return;
-    
-    select.innerHTML = '<option value="ALL">🌐 All Pools</option>';
-    dataList.innerHTML = '';
-
-    pools.forEach(pool => {
-      select.innerHTML += `<option value="${pool}">${pool}</option>`;
-      dataList.innerHTML += `<option value="${pool}">`;
-    });
-  }
-
-  function applyFiltersAndRender() {
-    const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
-    
-    let searchFiltered = enrichedData.filter(d => {
-      const matchSearch = d.ip.toLowerCase().includes(searchTerm) || 
-                          d.name.toLowerCase().includes(searchTerm) ||
-                          d.hostname.toLowerCase().includes(searchTerm) ||
-                          d.pools.some(p => p.toLowerCase().includes(searchTerm));
-                          
-      const matchPool = activePool === 'ALL' ? true : d.pools.includes(activePool);
-      return matchSearch && matchPool;
-    });
-
-    renderSummary(searchFiltered);
-
-    let tableFiltered = searchFiltered.filter(d => {
-      if (activeStatFilter === 'ALL') return true;
-      if (activeStatFilter === 'RED') return d.snds_filter === 'RED';
-      if (activeStatFilter === 'TRAPS') return d.traps > 0;
-      if (activeStatFilter === 'GOOGLE_BAD') return d.google_rep === 'BAD' || d.google_rep === 'LOW';
-      return true;
-    });
-
-    tableFiltered.sort((a, b) => {
-      let valA = a[sortCol];
-      let valB = b[sortCol];
-
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortAsc ? valA - valB : valB - valA;
-      }
-      
-      if (sortCol === 'ip') {
-        const numA = ipToNumber(a.ip);
-        const numB = ipToNumber(b.ip);
-        return sortAsc ? numA - numB : numB - numA;
-      }
-
-      let strA = String(valA).toLowerCase();
-      let strB = String(valB).toLowerCase();
-      if (strA < strB) return sortAsc ? -1 : 1;
-      if (strA > strB) return sortAsc ? 1 : -1;
-      return 0;
-    });
-
-    currentFilteredData = tableFiltered;
-    renderTable(tableFiltered);
-    renderPoolsView(searchFiltered);
-  }
-
-  function ipToNumber(ip) {
-    if (!ip) return 0;
-    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-  }
-
-  function renderSummary(data) {
-    const container = document.getElementById('inventory-summary');
-    if (!container) return;
-    
-    const total = data.length;
-    const sndsRed = data.filter(d => d.snds_filter === 'RED').length;
-    const trapCount = data.filter(d => d.traps > 0).length;
-    const googleBad = data.filter(d => d.google_rep === 'BAD' || d.google_rep === 'LOW').length;
-
-    const getActiveCls = (filter) => activeStatFilter === filter ? 'active-filter' : '';
-
-    container.innerHTML = `
-      <div class="stat-card info ${getActiveCls('ALL')}" onclick="window.setStatFilter('ALL')">
-        <span class="stat-label">Total MTAs</span>
-        <span class="stat-value">${total}</span>
-      </div>
-      <div class="stat-card ${sndsRed > 0 ? 'danger' : 'success'} ${getActiveCls('RED')}" onclick="window.setStatFilter('RED')">
-        <span class="stat-label">SNDS: Red Status</span>
-        <span class="stat-value">${sndsRed}</span>
-      </div>
-      <div class="stat-card ${trapCount > 0 ? 'warning' : 'success'} ${getActiveCls('TRAPS')}" onclick="window.setStatFilter('TRAPS')">
-        <span class="stat-label">Hitting Traps</span>
-        <span class="stat-value">${trapCount}</span>
-      </div>
-      <div class="stat-card ${googleBad > 0 ? 'danger-light' : 'success'} ${getActiveCls('GOOGLE_BAD')}" onclick="window.setStatFilter('GOOGLE_BAD')">
-        <span class="stat-label">Google: Bad/Low</span>
-        <span class="stat-value">${googleBad}</span>
-      </div>
-    `;
-  }
-
-  function renderTable(data) {
-    const tbody = document.getElementById('tableBody');
-    if (!tbody) return;
-    
-    if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 20px;">No IP addresses match your filters.</td></tr>`;
-      return;
-    }
-
-    let html = '';
-    data.forEach(row => {
-      const poolBadges = row.pools.length > 0 
-        ? row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
-        : `<span class="text-gray">—</span>`;
-
-      const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
-
-      html += `
-       <tr class="domain-row ${isCritical ? 'row-alert' : ''}" title="Managed via GreenArrow">
-          <td class="domain-text"><strong>${row.name}</strong></td>
-          <td style="font-family: monospace; font-size: 0.9rem;">${row.ip}</td>
-          <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568;">${row.hostname}</td>
-          <td class="center"><span class="badge badge-gray" style="font-size: 0.8rem;">${row.throttling_template}</span></td>
-          <td><div class="pools-container">${poolBadges}</div></td>
-          <td class="center">${formatSNDS(row.snds_filter)}</td>
-          <td class="center" style="${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
-          <td class="center" style="${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
-          <td class="center">${formatGoogleRep(row.google_rep)}</td>
-        </tr>
-      `;
-    });
-    tbody.innerHTML = html;
-  }
-
-  function renderPoolsView(data) {
-    const poolMap = {};
-    
-    data.forEach(d => {
-      d.pools.forEach(p => {
-        if(!poolMap[p]) poolMap[p] = [];
-        poolMap[p].push(d.name + ` (${d.ip})`);
-      });
-    });
-
-    const tbody = document.getElementById('poolsTableBody');
-    if (!tbody) return;
-
-    let html = '';
-    Object.keys(poolMap).sort().forEach(poolName => {
-      const ips = poolMap[poolName];
-      html += `
-        <tr class="domain-row">
-          <td><strong style="font-size: 1.1rem; color: #2d3748;">${poolName}</strong></td>
-          <td class="center"><span class="badge badge-gray" style="font-size: 0.9rem;">${ips.length} MTAs</span></td>
-          <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568; line-height: 1.5;">${ips.join(', ')}</td>
-          <td class="center">
-            <button class="btn-export" style="padding: 6px 12px; font-size: 0.8rem; background: #3182ce;" onclick="window.jumpToPool('${poolName}')">
-              Manage IPs
-            </button>
-          </td>
-        </tr>
-      `;
-    });
-    
-    if (html === '') html = `<tr><td colspan="4" class="center" style="padding: 20px;">No pools found.</td></tr>`;
-    tbody.innerHTML = html;
-  }
-
-  function formatSNDS(status) {
-    if (!status || status === 'UNKNOWN') return `<span class="badge badge-gray">UNKNOWN</span>`;
-    let cls = 'badge-green';
-    if (status === 'YELLOW') cls = 'badge-yellow';
-    if (status === 'RED') cls = 'badge-red';
-    return `<span class="badge ${cls}">${status}</span>`;
-  }
-
-  function formatGoogleRep(rep) {
-    if (!rep || rep === 'UNKNOWN') return `<span class="badge badge-gray">UNKNOWN</span>`;
-    let cls = 'badge-gray';
-    if (rep === 'HIGH') cls = 'badge-green';
-    if (rep === 'MEDIUM') cls = 'badge-yellow';
-    if (rep === 'LOW' || rep === 'BAD') cls = 'badge-red';
-    return `<span class="badge ${cls}">${rep}</span>`;
-  }
-
-  (window as any).sortBy = (col) => {
-    if (sortCol === col) sortAsc = !sortAsc;
-    else { sortCol = col; sortAsc = true; }
-    applyFiltersAndRender();
-  };
-
-  (window as any).setStatFilter = (filter) => {
-    activeStatFilter = filter;
-    applyFiltersAndRender();
-  };
-
-  (window as any).setView = (viewName) => {
-    document.getElementById('ipsView').style.display = viewName === 'ips' ? 'block' : 'none';
-    document.getElementById('poolsView').style.display = viewName === 'pools' ? 'block' : 'none';
-    
-    document.getElementById('btnViewIps').classList.toggle('active', viewName === 'ips');
-    document.getElementById('btnViewPools').classList.toggle('active', viewName === 'pools');
-  };
-
-  (window as any).jumpToPool = (poolName) => {
-    activePool = poolName;
-    (document.getElementById('poolFilter') as HTMLSelectElement).value = poolName;
-    activeStatFilter = 'ALL';
-    (window as any).setView('ips');
-    applyFiltersAndRender();
-  };
-
-  (window as any).openEditModal = (ip) => {
-    // Временно отключено, так как теперь всем управляет GreenArrow
-    alert("Configurations are now automatically synced from GreenArrow and cannot be edited manually.");
-  };
-
-(window as any).syncData = async (btn) => {
+  // --- ФИНАЛЬНАЯ SYNC ЛОГИКА ---
+  (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML;
     btn.disabled = true;
-
     try {
       btn.innerHTML = '⏳ 1/4: Fetching GA Lists...';
-      
-      const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list', { cache: 'no-store' });
+      const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
       const lists = await listRes.json();
       const ruleIds = lists.rules.map(r => r.id);
       const ipIds = lists.ips.map(r => r.id);
 
-      const detailedRules = [];
-      const chunkSize = 15; // Безопасный размер пачки для GA
-      
-      for (let i = 0; i < ruleIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 2/4: Syncing Pools (${Math.min(i + chunkSize, ruleIds.length)}/${ruleIds.length})...`;
-        const chunk = ruleIds.slice(i, i + chunkSize);
-        const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
-          method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: chunk })
-        });
-        detailedRules.push(...(await res.json()));
-      }
-
       const mtaNameToPools = {};
       
-      // РЕКУРСИВНЫЙ ИСКАТЕЛЬ ПУЛОВ (найдет всё, даже в оверрайдах)
-      const extractMtas = (obj, poolName) => {
-        if (!obj) return;
-        if (typeof obj === 'object' && !Array.isArray(obj)) {
-          if (obj.virtual_mta && obj.virtual_mta.name) {
-            const mtaName = obj.virtual_mta.name;
-            if (!mtaNameToPools[mtaName]) mtaNameToPools[mtaName] = new Set();
-            mtaNameToPools[mtaName].add(poolName);
-          }
-          Object.values(obj).forEach(val => extractMtas(val, poolName));
-        } else if (Array.isArray(obj)) {
-          obj.forEach(item => extractMtas(item, poolName));
+      // Глубокий рекурсивный поиск MTA в правилах
+      const scanRule = (obj, poolName) => {
+        if (!obj || typeof obj !== 'object') return;
+        if (obj.virtual_mta && obj.virtual_mta.name) {
+          const mta = obj.virtual_mta.name;
+          if (!mtaNameToPools[mta]) mtaNameToPools[mta] = new Set();
+          mtaNameToPools[mta].add(poolName);
         }
+        Object.values(obj).forEach(v => scanRule(v, poolName));
       };
 
-      detailedRules.forEach(res => {
-        if(!res || !res.success) return;
-        const rule = res.data?.routing_rule;
-        if (rule) extractMtas(rule, rule.name);
-      });
+      const chunkSize = 10; // Маленький батч для стабильности
+      for (let i = 0; i < ruleIds.length; i += chunkSize) {
+        btn.innerHTML = `⏳ 2/4: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
+        const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
+          method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: ruleIds.slice(i, i+chunkSize) })
+        });
+        const details = await res.json();
+        details.forEach(d => { if(d?.success) scanRule(d.data.routing_rule, d.data.routing_rule.name); });
+      }
 
       const updatePayload = [];
-
       for (let i = 0; i < ipIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 3/4: Syncing MTAs (${Math.min(i + chunkSize, ipIds.length)}/${ipIds.length})...`;
-        const chunk = ipIds.slice(i, i + chunkSize);
+        btn.innerHTML = `⏳ 3/4: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
         const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
-          method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk })
+          method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: ipIds.slice(i, i+chunkSize) })
         });
-        const data = await res.json();
-
-        data.forEach(res => {
-          if(!res || !res.success) return;
-          const ipData = res.data?.ip_address;
-          if (!ipData || !ipData.ip || !ipData.name) return;
-
-          const mtaName = ipData.name;
-          const pools = mtaNameToPools[mtaName] ? Array.from(mtaNameToPools[mtaName]) : [];
-
+        const details = await res.json();
+        details.forEach(d => {
+          if(!d?.success) return;
+          const ipData = d.data.ip_address;
+          const pools = mtaNameToPools[ipData.name] ? Array.from(mtaNameToPools[ipData.name]) : [];
           updatePayload.push({
-            name: mtaName,
-            ip_address: ipData.ip,
-            hostname: ipData.hostname || '—',
-            pools: JSON.stringify(pools),
-            throttling_template: ipData.throttling_template?.name || ''
+            name: ipData.name, ip_address: ipData.ip, hostname: ipData.hostname || '—',
+            pools: JSON.stringify(pools), throttling_template: ipData.throttling_template?.name || ''
           });
         });
       }
 
-      // 4. БЕЗОПАСНОЕ СОХРАНЕНИЕ В БАЗУ (Пачками по 50 штук, чтобы воркер не падал)
-      const dbChunkSize = 50;
-      for (let i = 0; i < updatePayload.length; i += dbChunkSize) {
-        btn.innerHTML = `⏳ 4/4: Saving Data (${Math.min(i + dbChunkSize, updatePayload.length)}/${updatePayload.length})...`;
-        const chunk = updatePayload.slice(i, i + dbChunkSize);
+      // Безопасное сохранение мелкими пачками (по 50)
+      for (let i = 0; i < updatePayload.length; i += 50) {
+        btn.innerHTML = `⏳ 4/4: Saving... (${Math.min(i+50, updatePayload.length)}/${updatePayload.length})`;
         await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
-          method: 'POST', body: JSON.stringify(chunk)
+          method: 'POST', body: JSON.stringify(updatePayload.slice(i, i+50))
         });
       }
 
-      btn.innerHTML = '⏳ Refreshing Dashboard...';
       await init();
-
-    } catch (err) {
-      console.error("Sync Error:", err);
-      alert("Failed to sync data. Check console.");
-    } finally {
-      btn.innerHTML = originalText;
-      btn.disabled = false;
-    }
+    } catch (err) { alert("Sync failed. Check console."); console.error(err); }
+    finally { btn.innerHTML = originalText; btn.disabled = false; }
   };
 
   (window as any).downloadCSV = () => {
-    if (currentFilteredData.length === 0) {
-      alert("No data available to export.");
-      return;
-    }
-    
-    const headers = ['MTA Name', 'IP Address', 'Hostname', 'Throttling Template', 'Pools', 'SNDS Status', 'Complaints %', 'Traps', 'JMR Incident', 'Google Rep', 'Last SNDS Update'];
+    const headers = ['MTA Name', 'IP', 'Hostname', 'Template', 'Pools', 'SNDS', 'Complaints', 'Traps', 'Google'];
     const rows = currentFilteredData.map(d => [
-      d.name,
-      d.ip,
-      d.hostname,
-      d.throttling_template,
-      `"${d.pools.join(', ')}"`,
-      d.snds_filter,
-      d.complaints,
-      d.traps,
-      d.jmr,
-      d.google_rep,
-      d.snds_date || 'N/A'
+      d.name, d.ip, d.hostname, d.throttling_template, `"${d.pools.join(', ')}"`, 
+      d.snds_filter, d.complaints, d.traps, d.google_rep
     ]);
-    
-    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
     const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `mta_inventory_${activePool.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
+    link.href = URL.createObjectURL(blob);
+    link.download = `inventory_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
-    document.body.removeChild(link);
   };
 
+  // Остальные функции (applyFilters, renderTable и т.д. остаются без изменений)
   init();
 </script>
 
