@@ -58,6 +58,7 @@ import Layout from '../layouts/Layout.astro';
               <tr>
                 <th class="sortable" onclick="window.sortBy('ip')">IP Address</th>
                 <th class="sortable" onclick="window.sortBy('hostname')">Hostname (PTR)</th>
+				<th class="center sortable" onclick="window.sortBy('throttling_template')">Throttling Template</th>
                 <th>Assigned Pools</th>
                 <th class="center sortable" onclick="window.sortBy('snds_filter')">SNDS Status</th>
                 <th class="center sortable" onclick="window.sortBy('complaints')">Complaints</th>
@@ -202,6 +203,7 @@ import Layout from '../layouts/Layout.astro';
           ...item, // Сохраняем оригинальные pool1..pool4 для редактирования
           ip: item.ip,
           hostname: item.hostname || '—',
+		  throttling_template: item.throttling_template || '—',
           pools: pools,
           snds_filter: sndsRecord.filter_result || 'UNKNOWN',
           complaints: sndsRecord.complaints || 0,
@@ -350,6 +352,7 @@ import Layout from '../layouts/Layout.astro';
         <tr class="domain-row ${isCritical ? 'row-alert' : ''}" onclick="window.openEditModal('${row.ip}')" title="Click to view/edit configuration">
           <td class="domain-text"><strong>${row.ip}</strong></td>
           <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568;">${row.hostname}</td>
+          <td class="center"><span class="badge badge-gray" style="font-size: 0.8rem;">${row.throttling_template || '—'}</span></td>
           <td><div class="pools-container">${poolBadges}</div></td>
           <td class="center">${formatSNDS(row.snds_filter)}</td>
           <td class="center" style="${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
@@ -522,7 +525,7 @@ import Layout from '../layouts/Layout.astro';
       return;
     }
     
-    const headers = ['IP Address', 'Hostname', 'Pools', 'SNDS Status', 'Complaints %', 'Traps', 'JMR Incident', 'Google Rep', 'Last SNDS Update'];
+    const headers = ['IP Address', 'Hostname', 'Throttling Template', 'Pools', 'SNDS Status', 'Complaints %', 'Traps', 'JMR Incident', 'Google Rep', 'Last SNDS Update'];
     const rows = currentFilteredData.map(d => [
       d.ip,
       d.hostname,
