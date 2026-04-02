@@ -499,17 +499,83 @@ import Layout from '../layouts/Layout.astro';
 
 (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Pulling from GA...';
     btn.disabled = true;
 
     try {
-      // 1. Сначала дергаем воркер ga-manager, чтобы он обновил пулы в D1
-      await fetch(GA_PULL_URL, { method: 'POST' });
+      btn.innerHTML = '⏳ 1/4: Fetching GA Lists...';
       
-      // 2. Затем воркер d1-template отдаст уже свежие данные
+      // 1. Получаем списки всех ID
+      const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
+      const lists = await listRes.json();
+      const ruleIds = lists.rules.map(r => r.id);
+      const ipIds = lists.ips.map(r => r.id);
+
+      // 2. Скачиваем пулы пачками по 20 штук
+      const detailedRules = [];
+      const chunkSize = 20;
+      for (let i = 0; i < ruleIds.length; i += chunkSize) {
+        btn.innerHTML = `⏳ 2/4: Syncing Pools (${Math.min(i + chunkSize, ruleIds.length)}/${ruleIds.length})...`;
+        const chunk = ruleIds.slice(i, i + chunkSize);
+        const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
+          method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: chunk })
+        });
+        detailedRules.push(...(await res.json()));
+      }
+
+      // Строим карту пулов в памяти браузера
+      const mtaNameToPools = {};
+      detailedRules.forEach(res => {
+        if(!res || !res.success) return;
+        const rule = res.data?.routing_rule;
+        if (!rule) return;
+        const poolName = rule.name;
+        
+        const deliverThrough = rule.default?.deliver_through || [];
+        deliverThrough.forEach(dt => {
+          const mtaName = dt.virtual_mta?.name;
+          if (mtaName) {
+            if (!mtaNameToPools[mtaName]) mtaNameToPools[mtaName] = [];
+            if (!mtaNameToPools[mtaName].includes(poolName)) mtaNameToPools[mtaName].push(poolName);
+          }
+        });
+      });
+
+      // 3. Скачиваем детали IP пачками по 20 штук и сразу маппим
+      const updatePayload = [];
+      for (let i = 0; i < ipIds.length; i += chunkSize) {
+        btn.innerHTML = `⏳ 3/4: Syncing IPs (${Math.min(i + chunkSize, ipIds.length)}/${ipIds.length})...`;
+        const chunk = ipIds.slice(i, i + chunkSize);
+        const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
+          method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk })
+        });
+        const data = await res.json();
+
+        data.forEach(res => {
+          if(!res || !res.success) return;
+          const ipData = res.data?.ip_address;
+          if (!ipData || !ipData.ip || !ipData.name) return;
+
+          const mtaName = ipData.name;
+          const pools = mtaNameToPools[mtaName] || [];
+
+          updatePayload.push({
+            ip: ipData.ip,
+            throttling_template: ipData.throttling_template?.name || '',
+            pool1: pools[0] || '', pool2: pools[1] || '',
+            pool3: pools[2] || '', pool4: pools[3] || ''
+          });
+        });
+      }
+
+      // 4. Отправляем готовую пачку на сохранение в D1
+      btn.innerHTML = `⏳ 4/4: Saving to Database...`;
+      await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
+        method: 'POST', body: JSON.stringify(updatePayload)
+      });
+
       btn.innerHTML = '⏳ Refreshing Dashboard...';
       await init();
-      
+
     } catch (err) {
       console.error("Sync Error:", err);
       alert("Failed to sync data. Check console.");
