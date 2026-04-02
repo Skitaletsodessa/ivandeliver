@@ -146,8 +146,6 @@ import Layout from '../layouts/Layout.astro';
   const IMPORT_URL = 'https://d1-template.skitalets-od.workers.dev/api/import-ips';
   const SNDS_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
   const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
-  
-  // Добавляем URL для синхронизации с GA
   const GA_PULL_URL = 'https://ga-manager.skitalets-od.workers.dev/api/pull-mta';
   
   let enrichedData = [];
@@ -156,11 +154,10 @@ import Layout from '../layouts/Layout.astro';
   let sortCol = 'ip';
   let sortAsc = true;
   let activePool = 'ALL';
-  let activeStatFilter = 'ALL'; // Для кликабельных карточек
+  let activeStatFilter = 'ALL';
 
   async function init() {
     try {
-      // 1. Запрашиваем данные из всех трех источников параллельно
       const [invRes, sndsRes, pmRes] = await Promise.all([
         fetch(INVENTORY_URL),
         fetch(SNDS_URL),
@@ -171,7 +168,6 @@ import Layout from '../layouts/Layout.astro';
       const sndsData = await sndsRes.json();
       const pmData = await pmRes.json();
 
-      // 2. Создаем "Словарь" репутации Google
       const googleIpMap = {};
       pmData.forEach(domainRow => {
         if(domainRow.ip_rep_detailed && domainRow.ip_rep_detailed !== '[]') {
@@ -190,21 +186,18 @@ import Layout from '../layouts/Layout.astro';
         }
       });
 
-      // 3. Собираем список всех уникальных пулов
       const allPools = new Set();
 
-     // 4. Обогащаем инвентарь
       enrichedData = inventory.map(item => {
         let poolsArr = [];
         try { poolsArr = JSON.parse(item.pools || '[]'); } catch(e) {}
         poolsArr.forEach(p => allPools.add(p));
 
-        // Ищем стату по ФИЗИЧЕСКОМУ IP
         const sndsRecord = sndsData.find(s => s.ip === item.ip_address) || {};
 
         return {
           name: item.name,
-          ip: item.ip_address, // Используем ключ ip для совместимости сортировки
+          ip: item.ip_address, 
           hostname: item.hostname || '—',
           pools: poolsArr,
           throttling_template: item.throttling_template || '—',
@@ -249,19 +242,18 @@ import Layout from '../layouts/Layout.astro';
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
-    // Сначала фильтруем только по тексту и пулу (чтобы карточки показывали правильную стату для пула)
     let searchFiltered = enrichedData.filter(d => {
       const matchSearch = d.ip.toLowerCase().includes(searchTerm) || 
+                          d.name.toLowerCase().includes(searchTerm) ||
                           d.hostname.toLowerCase().includes(searchTerm) ||
-                          d.pools.some(p => p.toLowerCase().includes(searchTerm)); // Ищем по пулам!
+                          d.pools.some(p => p.toLowerCase().includes(searchTerm));
                           
       const matchPool = activePool === 'ALL' ? true : d.pools.includes(activePool);
       return matchSearch && matchPool;
     });
 
-    renderSummary(searchFiltered); // Рисуем статистику на базе поиска
+    renderSummary(searchFiltered);
 
-    // Затем применяем фильтр карточек к таблице
     let tableFiltered = searchFiltered.filter(d => {
       if (activeStatFilter === 'ALL') return true;
       if (activeStatFilter === 'RED') return d.snds_filter === 'RED';
@@ -270,7 +262,6 @@ import Layout from '../layouts/Layout.astro';
       return true;
     });
 
-    // Сортировка
     tableFiltered.sort((a, b) => {
       let valA = a[sortCol];
       let valB = b[sortCol];
@@ -294,11 +285,11 @@ import Layout from '../layouts/Layout.astro';
 
     currentFilteredData = tableFiltered;
     renderTable(tableFiltered);
-    renderPoolsView(searchFiltered); // Рисуем вкладку пулов
+    renderPoolsView(searchFiltered);
   }
 
-  // Вспомогательная функция для правильной сортировки IP
   function ipToNumber(ip) {
+    if (!ip) return 0;
     return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
   }
 
@@ -315,7 +306,7 @@ import Layout from '../layouts/Layout.astro';
 
     container.innerHTML = `
       <div class="stat-card info ${getActiveCls('ALL')}" onclick="window.setStatFilter('ALL')">
-        <span class="stat-label">Total IPs</span>
+        <span class="stat-label">Total MTAs</span>
         <span class="stat-value">${total}</span>
       </div>
       <div class="stat-card ${sndsRed > 0 ? 'danger' : 'success'} ${getActiveCls('RED')}" onclick="window.setStatFilter('RED')">
@@ -338,7 +329,7 @@ import Layout from '../layouts/Layout.astro';
     if (!tbody) return;
     
     if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="center" style="padding: 20px;">No IP addresses match your filters.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 20px;">No IP addresses match your filters.</td></tr>`;
       return;
     }
 
@@ -350,9 +341,8 @@ import Layout from '../layouts/Layout.astro';
 
       const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
 
-// Строка снова кликабельная
       html += `
-       <tr class="domain-row ${isCritical ? 'row-alert' : ''}" onclick="window.openEditModal('${row.ip}')" title="Managed via GreenArrow">
+       <tr class="domain-row ${isCritical ? 'row-alert' : ''}" title="Managed via GreenArrow">
           <td class="domain-text"><strong>${row.name}</strong></td>
           <td style="font-family: monospace; font-size: 0.9rem;">${row.ip}</td>
           <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568;">${row.hostname}</td>
@@ -371,11 +361,10 @@ import Layout from '../layouts/Layout.astro';
   function renderPoolsView(data) {
     const poolMap = {};
     
-    // Группируем IP по пулам
     data.forEach(d => {
       d.pools.forEach(p => {
         if(!poolMap[p]) poolMap[p] = [];
-        poolMap[p].push(d.ip);
+        poolMap[p].push(d.name + ` (${d.ip})`);
       });
     });
 
@@ -388,7 +377,7 @@ import Layout from '../layouts/Layout.astro';
       html += `
         <tr class="domain-row">
           <td><strong style="font-size: 1.1rem; color: #2d3748;">${poolName}</strong></td>
-          <td class="center"><span class="badge badge-gray" style="font-size: 0.9rem;">${ips.length} IPs</span></td>
+          <td class="center"><span class="badge badge-gray" style="font-size: 0.9rem;">${ips.length} MTAs</span></td>
           <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568; line-height: 1.5;">${ips.join(', ')}</td>
           <td class="center">
             <button class="btn-export" style="padding: 6px 12px; font-size: 0.8rem; background: #3182ce;" onclick="window.jumpToPool('${poolName}')">
@@ -420,8 +409,6 @@ import Layout from '../layouts/Layout.astro';
     return `<span class="badge ${cls}">${rep}</span>`;
   }
 
-  // --- ИНТЕРАКТИВНЫЕ ФУНКЦИИ ---
-
   (window as any).sortBy = (col) => {
     if (sortCol === col) sortAsc = !sortAsc;
     else { sortCol = col; sortAsc = true; }
@@ -442,7 +429,6 @@ import Layout from '../layouts/Layout.astro';
   };
 
   (window as any).jumpToPool = (poolName) => {
-    // Выбираем пул в дропдауне, сбрасываем фильтры и переключаемся на вкладку IP
     activePool = poolName;
     (document.getElementById('poolFilter') as HTMLSelectElement).value = poolName;
     activeStatFilter = 'ALL';
@@ -451,70 +437,22 @@ import Layout from '../layouts/Layout.astro';
   };
 
   (window as any).openEditModal = (ip) => {
-    const data = enrichedData.find(d => d.ip === ip);
-    if (!data) return;
-
-    document.getElementById('editModalTitle').innerText = `Edit: ${data.ip}`;
-    (document.getElementById('editIpAddress') as HTMLInputElement).value = data.ip;
-    (document.getElementById('editHostname') as HTMLInputElement).value = data.hostname !== '—' ? data.hostname : '';
-    
-    (document.getElementById('editPool1') as HTMLInputElement).value = data.pool1 || '';
-    (document.getElementById('editPool2') as HTMLInputElement).value = data.pool2 || '';
-    (document.getElementById('editPool3') as HTMLInputElement).value = data.pool3 || '';
-    (document.getElementById('editPool4') as HTMLInputElement).value = data.pool4 || '';
-
-    (document.getElementById('editIpModal') as HTMLDialogElement).showModal();
+    // Временно отключено, так как теперь всем управляет GreenArrow
+    alert("Configurations are now automatically synced from GreenArrow and cannot be edited manually.");
   };
 
-  (window as any).saveIpChanges = async (event) => {
-    event.preventDefault();
-    const btn = event.target.querySelector('button[type="submit"]');
-    const originalText = btn.innerText;
-    btn.innerText = '⏳ Saving...';
-    btn.disabled = true;
-
-    const payload = {
-      ip: (document.getElementById('editIpAddress') as HTMLInputElement).value,
-      hostname: (document.getElementById('editHostname') as HTMLInputElement).value,
-      pool1: (document.getElementById('editPool1') as HTMLInputElement).value,
-      pool2: (document.getElementById('editPool2') as HTMLInputElement).value,
-      pool3: (document.getElementById('editPool3') as HTMLInputElement).value,
-      pool4: (document.getElementById('editPool4') as HTMLInputElement).value,
-    };
-
-    try {
-      await fetch(IMPORT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([payload]) // Отправляем как массив, воркер так требует
-      });
-      
-      (document.getElementById('editIpModal') as HTMLDialogElement).close();
-      await init(); // Перезагружаем данные чтобы увидеть изменения
-      
-    } catch (err) {
-      alert("Failed to save changes. Check console.");
-      console.error(err);
-    } finally {
-      btn.innerText = originalText;
-      btn.disabled = false;
-    }
-  };
-
-(window as any).syncData = async (btn) => {
+  (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML;
     btn.disabled = true;
 
     try {
       btn.innerHTML = '⏳ 1/4: Fetching GA Lists...';
       
-      // 1. Получаем списки всех ID
       const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
       const lists = await listRes.json();
       const ruleIds = lists.rules.map(r => r.id);
       const ipIds = lists.ips.map(r => r.id);
 
-      // 2. Скачиваем пулы пачками по 20 штук
       const detailedRules = [];
       const chunkSize = 20;
       for (let i = 0; i < ruleIds.length; i += chunkSize) {
@@ -526,7 +464,6 @@ import Layout from '../layouts/Layout.astro';
         detailedRules.push(...(await res.json()));
       }
 
-      // Строим карту пулов в памяти браузера
       const mtaNameToPools = {};
       detailedRules.forEach(res => {
         if(!res || !res.success) return;
@@ -544,11 +481,10 @@ import Layout from '../layouts/Layout.astro';
         });
       });
 
-// 3. Скачиваем детали IP и просто собираем массив
       const updatePayload = [];
 
       for (let i = 0; i < ipIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 3/4: Syncing IPs (${Math.min(i + chunkSize, ipIds.length)}/${ipIds.length})...`;
+        btn.innerHTML = `⏳ 3/4: Syncing MTAs (${Math.min(i + chunkSize, ipIds.length)}/${ipIds.length})...`;
         const chunk = ipIds.slice(i, i + chunkSize);
         const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
           method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk })
@@ -567,17 +503,28 @@ import Layout from '../layouts/Layout.astro';
             name: mtaName,
             ip_address: ipData.ip,
             hostname: ipData.hostname || '—',
-            pools: JSON.stringify(pools), // Храним массив пулов как строку
+            pools: JSON.stringify(pools),
             throttling_template: ipData.throttling_template?.name || ''
           });
         });
       }
 
-      // 4. Отправляем в D1
       btn.innerHTML = `⏳ 4/4: Saving to Database...`;
       await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
         method: 'POST', body: JSON.stringify(updatePayload)
       });
+
+      btn.innerHTML = '⏳ Refreshing Dashboard...';
+      await init();
+
+    } catch (err) {
+      console.error("Sync Error:", err);
+      alert("Failed to sync data. Check console.");
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
+  };
 
   (window as any).downloadCSV = () => {
     if (currentFilteredData.length === 0) {
@@ -585,11 +532,13 @@ import Layout from '../layouts/Layout.astro';
       return;
     }
     
-    const headers = ['IP Address', 'Hostname', 'Throttling Template', 'Pools', 'SNDS Status', 'Complaints %', 'Traps', 'JMR Incident', 'Google Rep', 'Last SNDS Update'];
+    const headers = ['MTA Name', 'IP Address', 'Hostname', 'Throttling Template', 'Pools', 'SNDS Status', 'Complaints %', 'Traps', 'JMR Incident', 'Google Rep', 'Last SNDS Update'];
     const rows = currentFilteredData.map(d => [
+      d.name,
       d.ip,
       d.hostname,
-      `"${d.pools.join(', ')}"`, // Заворачиваем в кавычки
+      d.throttling_template,
+      `"${d.pools.join(', ')}"`,
       d.snds_filter,
       d.complaints,
       d.traps,
@@ -603,7 +552,7 @@ import Layout from '../layouts/Layout.astro';
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `ip_inventory_${activePool.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `mta_inventory_${activePool.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
