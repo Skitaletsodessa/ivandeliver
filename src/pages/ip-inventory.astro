@@ -441,7 +441,7 @@ import Layout from '../layouts/Layout.astro';
     alert("Configurations are now automatically synced from GreenArrow and cannot be edited manually.");
   };
 
-  (window as any).syncData = async (btn) => {
+  (window as any).syncData = async (btn) => (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML;
     btn.disabled = true;
 
@@ -454,7 +454,8 @@ import Layout from '../layouts/Layout.astro';
       const ipIds = lists.ips.map(r => r.id);
 
       const detailedRules = [];
-      const chunkSize = 20;
+      const chunkSize = 10; // Уменьшили батчи до 10 для стабильности API
+      
       for (let i = 0; i < ruleIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 2/4: Syncing Pools (${Math.min(i + chunkSize, ruleIds.length)}/${ruleIds.length})...`;
         const chunk = ruleIds.slice(i, i + chunkSize);
@@ -465,20 +466,35 @@ import Layout from '../layouts/Layout.astro';
       }
 
       const mtaNameToPools = {};
+      
+      // Продвинутый парсинг пулов
       detailedRules.forEach(res => {
         if(!res || !res.success) return;
         const rule = res.data?.routing_rule;
         if (!rule) return;
         const poolName = rule.name;
         
-        const deliverThrough = rule.default?.deliver_through || [];
-        deliverThrough.forEach(dt => {
-          const mtaName = dt.virtual_mta?.name;
-          if (mtaName) {
-            if (!mtaNameToPools[mtaName]) mtaNameToPools[mtaName] = [];
-            if (!mtaNameToPools[mtaName].includes(poolName)) mtaNameToPools[mtaName].push(poolName);
-          }
-        });
+        // Вспомогательная функция для извлечения имен MTA
+        const addMtas = (deliverThrough) => {
+          if (!Array.isArray(deliverThrough)) return;
+          deliverThrough.forEach(dt => {
+            const mtaName = dt.virtual_mta?.name;
+            if (mtaName) {
+              if (!mtaNameToPools[mtaName]) mtaNameToPools[mtaName] = new Set();
+              mtaNameToPools[mtaName].add(poolName);
+            }
+          });
+        };
+
+        // 1. Извлекаем из Default Route
+        addMtas(rule.default?.deliver_through);
+
+        // 2. Извлекаем из Domain Overrides (Hotmail, Yahoo и т.д.)
+        if (rule.domain_overrides && Array.isArray(rule.domain_overrides)) {
+          rule.domain_overrides.forEach(override => {
+            addMtas(override.deliver_through);
+          });
+        }
       });
 
       const updatePayload = [];
@@ -492,12 +508,13 @@ import Layout from '../layouts/Layout.astro';
         const data = await res.json();
 
         data.forEach(res => {
-          if(!res || !res.success) return;
+          if(!res || !res.success) return; // Если все же упало - игнорим безопасно
           const ipData = res.data?.ip_address;
           if (!ipData || !ipData.ip || !ipData.name) return;
 
           const mtaName = ipData.name;
-          const pools = mtaNameToPools[mtaName] || [];
+          // Превращаем Set обратно в массив
+          const pools = mtaNameToPools[mtaName] ? Array.from(mtaNameToPools[mtaName]) : [];
 
           updatePayload.push({
             name: mtaName,
