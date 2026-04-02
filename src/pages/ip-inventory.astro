@@ -56,6 +56,7 @@ import Layout from '../layouts/Layout.astro';
           <table>
             <thead>
               <tr>
+			    <th class="sortable" onclick="window.sortBy('name')">MTA Name</th>
                 <th class="sortable" onclick="window.sortBy('ip')">IP Address</th>
                 <th class="sortable" onclick="window.sortBy('hostname')">Hostname (PTR)</th>
 				<th class="center sortable" onclick="window.sortBy('throttling_template')">Throttling Template</th>
@@ -192,24 +193,26 @@ import Layout from '../layouts/Layout.astro';
       // 3. Собираем список всех уникальных пулов
       const allPools = new Set();
 
-      // 4. Обогащаем инвентарь
+     // 4. Обогащаем инвентарь
       enrichedData = inventory.map(item => {
-        const pools = [item.pool1, item.pool2, item.pool3, item.pool4].filter(p => p && p.trim() !== '');
-        pools.forEach(p => allPools.add(p));
+        let poolsArr = [];
+        try { poolsArr = JSON.parse(item.pools || '[]'); } catch(e) {}
+        poolsArr.forEach(p => allPools.add(p));
 
-        const sndsRecord = sndsData.find(s => s.ip === item.ip) || {};
+        // Ищем стату по ФИЗИЧЕСКОМУ IP
+        const sndsRecord = sndsData.find(s => s.ip === item.ip_address) || {};
 
         return {
-          ...item, // Сохраняем оригинальные pool1..pool4 для редактирования
-          ip: item.ip,
+          name: item.name,
+          ip: item.ip_address, // Используем ключ ip для совместимости сортировки
           hostname: item.hostname || '—',
-		  throttling_template: item.throttling_template || '—',
-          pools: pools,
+          pools: poolsArr,
+          throttling_template: item.throttling_template || '—',
           snds_filter: sndsRecord.filter_result || 'UNKNOWN',
           complaints: sndsRecord.complaints || 0,
           traps: sndsRecord.traps || 0,
           jmr: sndsRecord.jmr_p1_sender || '',
-          google_rep: googleIpMap[item.ip] || 'UNKNOWN',
+          google_rep: googleIpMap[item.ip_address] || 'UNKNOWN',
           snds_date: sndsRecord.date || null
         };
       });
@@ -349,10 +352,11 @@ import Layout from '../layouts/Layout.astro';
 
 // Строка снова кликабельная
       html += `
-        <tr class="domain-row ${isCritical ? 'row-alert' : ''}" onclick="window.openEditModal('${row.ip}')" title="Click to view/edit configuration">
-          <td class="domain-text"><strong>${row.ip}</strong></td>
+       <tr class="domain-row ${isCritical ? 'row-alert' : ''}" onclick="window.openEditModal('${row.ip}')" title="Managed via GreenArrow">
+          <td class="domain-text"><strong>${row.name}</strong></td>
+          <td style="font-family: monospace; font-size: 0.9rem;">${row.ip}</td>
           <td style="font-family: monospace; font-size: 0.85rem; color: #4a5568;">${row.hostname}</td>
-          <td class="center"><span class="badge badge-gray" style="font-size: 0.8rem;">${row.throttling_template || '—'}</span></td>
+          <td class="center"><span class="badge badge-gray" style="font-size: 0.8rem;">${row.throttling_template}</span></td>
           <td><div class="pools-container">${poolBadges}</div></td>
           <td class="center">${formatSNDS(row.snds_filter)}</td>
           <td class="center" style="${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
@@ -540,8 +544,9 @@ import Layout from '../layouts/Layout.astro';
         });
       });
 
-      // 3. Скачиваем детали IP пачками по 20 штук и сразу маппим
+// 3. Скачиваем детали IP и просто собираем массив
       const updatePayload = [];
+
       for (let i = 0; i < ipIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 3/4: Syncing IPs (${Math.min(i + chunkSize, ipIds.length)}/${ipIds.length})...`;
         const chunk = ipIds.slice(i, i + chunkSize);
@@ -559,31 +564,20 @@ import Layout from '../layouts/Layout.astro';
           const pools = mtaNameToPools[mtaName] || [];
 
           updatePayload.push({
-            ip: ipData.ip,
-            throttling_template: ipData.throttling_template?.name || '',
-            pool1: pools[0] || '', pool2: pools[1] || '',
-            pool3: pools[2] || '', pool4: pools[3] || ''
+            name: mtaName,
+            ip_address: ipData.ip,
+            hostname: ipData.hostname || '—',
+            pools: JSON.stringify(pools), // Храним массив пулов как строку
+            throttling_template: ipData.throttling_template?.name || ''
           });
         });
       }
 
-      // 4. Отправляем готовую пачку на сохранение в D1
+      // 4. Отправляем в D1
       btn.innerHTML = `⏳ 4/4: Saving to Database...`;
       await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
         method: 'POST', body: JSON.stringify(updatePayload)
       });
-
-      btn.innerHTML = '⏳ Refreshing Dashboard...';
-      await init();
-
-    } catch (err) {
-      console.error("Sync Error:", err);
-      alert("Failed to sync data. Check console.");
-    } finally {
-      btn.innerHTML = originalText;
-      btn.disabled = false;
-    }
-  };
 
   (window as any).downloadCSV = () => {
     if (currentFilteredData.length === 0) {
