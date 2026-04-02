@@ -441,20 +441,20 @@ import Layout from '../layouts/Layout.astro';
     alert("Configurations are now automatically synced from GreenArrow and cannot be edited manually.");
   };
 
-  (window as any).syncData = async (btn) => (window as any).syncData = async (btn) => {
+(window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML;
     btn.disabled = true;
 
     try {
       btn.innerHTML = '⏳ 1/4: Fetching GA Lists...';
       
-      const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
+      const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list', { cache: 'no-store' });
       const lists = await listRes.json();
       const ruleIds = lists.rules.map(r => r.id);
       const ipIds = lists.ips.map(r => r.id);
 
       const detailedRules = [];
-      const chunkSize = 10; // Уменьшили батчи до 10 для стабильности API
+      const chunkSize = 15; // Безопасный размер пачки для GA
       
       for (let i = 0; i < ruleIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 2/4: Syncing Pools (${Math.min(i + chunkSize, ruleIds.length)}/${ruleIds.length})...`;
@@ -467,34 +467,25 @@ import Layout from '../layouts/Layout.astro';
 
       const mtaNameToPools = {};
       
-      // Продвинутый парсинг пулов
+      // РЕКУРСИВНЫЙ ИСКАТЕЛЬ ПУЛОВ (найдет всё, даже в оверрайдах)
+      const extractMtas = (obj, poolName) => {
+        if (!obj) return;
+        if (typeof obj === 'object' && !Array.isArray(obj)) {
+          if (obj.virtual_mta && obj.virtual_mta.name) {
+            const mtaName = obj.virtual_mta.name;
+            if (!mtaNameToPools[mtaName]) mtaNameToPools[mtaName] = new Set();
+            mtaNameToPools[mtaName].add(poolName);
+          }
+          Object.values(obj).forEach(val => extractMtas(val, poolName));
+        } else if (Array.isArray(obj)) {
+          obj.forEach(item => extractMtas(item, poolName));
+        }
+      };
+
       detailedRules.forEach(res => {
         if(!res || !res.success) return;
         const rule = res.data?.routing_rule;
-        if (!rule) return;
-        const poolName = rule.name;
-        
-        // Вспомогательная функция для извлечения имен MTA
-        const addMtas = (deliverThrough) => {
-          if (!Array.isArray(deliverThrough)) return;
-          deliverThrough.forEach(dt => {
-            const mtaName = dt.virtual_mta?.name;
-            if (mtaName) {
-              if (!mtaNameToPools[mtaName]) mtaNameToPools[mtaName] = new Set();
-              mtaNameToPools[mtaName].add(poolName);
-            }
-          });
-        };
-
-        // 1. Извлекаем из Default Route
-        addMtas(rule.default?.deliver_through);
-
-        // 2. Извлекаем из Domain Overrides (Hotmail, Yahoo и т.д.)
-        if (rule.domain_overrides && Array.isArray(rule.domain_overrides)) {
-          rule.domain_overrides.forEach(override => {
-            addMtas(override.deliver_through);
-          });
-        }
+        if (rule) extractMtas(rule, rule.name);
       });
 
       const updatePayload = [];
@@ -508,12 +499,11 @@ import Layout from '../layouts/Layout.astro';
         const data = await res.json();
 
         data.forEach(res => {
-          if(!res || !res.success) return; // Если все же упало - игнорим безопасно
+          if(!res || !res.success) return;
           const ipData = res.data?.ip_address;
           if (!ipData || !ipData.ip || !ipData.name) return;
 
           const mtaName = ipData.name;
-          // Превращаем Set обратно в массив
           const pools = mtaNameToPools[mtaName] ? Array.from(mtaNameToPools[mtaName]) : [];
 
           updatePayload.push({
@@ -526,10 +516,15 @@ import Layout from '../layouts/Layout.astro';
         });
       }
 
-      btn.innerHTML = `⏳ 4/4: Saving to Database...`;
-      await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
-        method: 'POST', body: JSON.stringify(updatePayload)
-      });
+      // 4. БЕЗОПАСНОЕ СОХРАНЕНИЕ В БАЗУ (Пачками по 50 штук, чтобы воркер не падал)
+      const dbChunkSize = 50;
+      for (let i = 0; i < updatePayload.length; i += dbChunkSize) {
+        btn.innerHTML = `⏳ 4/4: Saving Data (${Math.min(i + dbChunkSize, updatePayload.length)}/${updatePayload.length})...`;
+        const chunk = updatePayload.slice(i, i + dbChunkSize);
+        await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
+          method: 'POST', body: JSON.stringify(chunk)
+        });
+      }
 
       btn.innerHTML = '⏳ Refreshing Dashboard...';
       await init();
