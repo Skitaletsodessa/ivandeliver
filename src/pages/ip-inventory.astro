@@ -145,6 +145,9 @@ import Layout from '../layouts/Layout.astro';
   const SNDS_URL = 'https://d1-template.skitalets-od.workers.dev/api/data';
   const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   
+  // Добавляем URL для синхронизации с GA
+  const GA_PULL_URL = 'https://ga-manager.skitalets-od.workers.dev/api/pull-mta';
+  
   let enrichedData = [];
   let currentFilteredData = [];
   
@@ -491,13 +494,26 @@ import Layout from '../layouts/Layout.astro';
     }
   };
 
-  (window as any).syncData = async (btn) => {
+(window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Refreshing...';
+    btn.innerHTML = '⏳ Pulling from GA...';
     btn.disabled = true;
-    await init();
-    btn.innerHTML = originalText;
-    btn.disabled = false;
+
+    try {
+      // 1. Сначала дергаем воркер ga-manager, чтобы он обновил пулы в D1
+      await fetch(GA_PULL_URL, { method: 'POST' });
+      
+      // 2. Затем воркер d1-template отдаст уже свежие данные
+      btn.innerHTML = '⏳ Refreshing Dashboard...';
+      await init();
+      
+    } catch (err) {
+      console.error("Sync Error:", err);
+      alert("Failed to sync data. Check console.");
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
   };
 
   (window as any).downloadCSV = () => {
