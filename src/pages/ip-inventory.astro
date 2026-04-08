@@ -165,7 +165,6 @@ import Layout from '../layouts/Layout.astro';
       enrichedData = inventory.map(item => {
         let poolsArr = [];
         try { poolsArr = JSON.parse(item.pools || '[]'); } catch(e) {}
-        // Очищаем от null значений, если связи пустые
         poolsArr = poolsArr.filter(p => p && p !== 'null');
         poolsArr.forEach(p => allPools.add(p));
 
@@ -416,24 +415,25 @@ import Layout from '../layouts/Layout.astro';
     (document.getElementById('detailsModal') as HTMLDialogElement).showModal();
   };
 
+  // --- ИНТЕЛЛЕКТУАЛЬНАЯ ПАКЕТНАЯ СИНХРОНИЗАЦИЯ ---
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
-      btn.innerHTML = '⏳ 1/4: Fetching Directory...';
+      btn.innerHTML = '⏳ 1/3: Fetching Global Directory...';
       const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
       const lists = await listRes.json();
       
       const ipMtas = lists.mtas.filter(m => m.type === 'ip_address' || !m.type);
-      const ruleMtas = lists.mtas.filter(m => m.type === 'routing_rule');
+      const ruleMtas = lists.rules || []; // Используем надежный список правил из второго запроса воркера
       
       const ipIds = ipMtas.map(r => r.id);
       const ruleIds = ruleMtas.map(r => r.id);
 
-      const updatePayload = { ips: [], rules: [], relations: [] };
       const chunkSize = 15;
 
+      // 1. Обработка IP и Связей (с мгновенным сохранением в базу)
       for (let i = 0; i < ipIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 2/4: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
+        btn.innerHTML = `⏳ 2/3: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
         const chunk = ipIds.slice(i, i+chunkSize);
         
         const detailsRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk }) });
@@ -442,6 +442,8 @@ import Layout from '../layouts/Layout.astro';
         const usedByRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'used_by', ids: chunk }) });
         const usedByData = await usedByRes.json();
 
+        let batchPayload = { ips: [], rules: [], relations: [], processed_mta_ids: chunk };
+
         for (let j = 0; j < chunk.length; j++) {
           const mtaId = chunk[j];
           const detail = detailsData[j];
@@ -449,7 +451,7 @@ import Layout from '../layouts/Layout.astro';
 
           if (detail && detail.success && detail.data && detail.data.ip_address) {
             const ipData = detail.data.ip_address;
-            updatePayload.ips.push({
+            batchPayload.ips.push({
               id: ipData.id,
               name: ipData.name,
               ip: ipData.ip || null,
@@ -461,10 +463,9 @@ import Layout from '../layouts/Layout.astro';
             });
           }
 
-          // ИСПРАВЛЕННАЯ ПРОВЕРКА МАССИВА USED_BY
           if (usedBy && usedBy.success && usedBy.data && Array.isArray(usedBy.data.used_by)) {
             usedBy.data.used_by.forEach(ref => {
-              updatePayload.relations.push({
+              batchPayload.relations.push({
                 mta_id: mtaId,
                 used_by_id: ref.id,
                 used_by_type: ref.type,
@@ -473,18 +474,28 @@ import Layout from '../layouts/Layout.astro';
             });
           }
         }
+
+        // Сохраняем эту пачку немедленно
+        if (batchPayload.ips.length > 0 || batchPayload.relations.length > 0 || batchPayload.processed_mta_ids.length > 0) {
+            await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
+              method: 'POST', body: JSON.stringify(batchPayload)
+            });
+        }
       }
 
+      // 2. Обработка Пулов (с мгновенным сохранением)
       for (let i = 0; i < ruleIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 3/4: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
+        btn.innerHTML = `⏳ 3/3: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
         const chunk = ruleIds.slice(i, i+chunkSize);
         const rulesRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: chunk }) });
         const rulesData = await rulesRes.json();
 
+        let batchPayload = { ips: [], rules: [], relations: [] };
+
         rulesData.forEach(r => {
           if (r && r.success && r.data && r.data.routing_rule) {
             const ruleData = r.data.routing_rule;
-            updatePayload.rules.push({
+            batchPayload.rules.push({
               id: ruleData.id,
               name: ruleData.name,
               randomization_type: ruleData.default?.randomization_type || null,
@@ -492,15 +503,17 @@ import Layout from '../layouts/Layout.astro';
             });
           }
         });
+
+        if (batchPayload.rules.length > 0) {
+            await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
+              method: 'POST', body: JSON.stringify(batchPayload)
+            });
+        }
       }
 
-      btn.innerHTML = `⏳ 4/4: Writing Database...`;
-      await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
-        method: 'POST', body: JSON.stringify(updatePayload)
-      });
-
+      btn.innerHTML = `✅ Finalizing...`;
       await init();
-    } catch (err) { console.error(err); alert("Sync failed. Check Console."); }
+    } catch (err) { console.error(err); alert("Sync failed. Check Console for details."); }
     finally { btn.innerHTML = originalText; btn.disabled = false; }
   };
 
