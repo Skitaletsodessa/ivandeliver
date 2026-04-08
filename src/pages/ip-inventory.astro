@@ -165,6 +165,8 @@ import Layout from '../layouts/Layout.astro';
       enrichedData = inventory.map(item => {
         let poolsArr = [];
         try { poolsArr = JSON.parse(item.pools || '[]'); } catch(e) {}
+        // Очищаем от null значений, если связи пустые
+        poolsArr = poolsArr.filter(p => p && p !== 'null');
         poolsArr.forEach(p => allPools.add(p));
 
         const sndsRecord = sndsData.find(s => s.ip === item.ip_address) || {};
@@ -408,36 +410,13 @@ import Layout from '../layouts/Layout.astro';
               ${poolBadges}
           </div>
       </div>
-
-      <div>
-          <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px;">Reputation Overview</div>
-          <div style="display: flex; gap: 10px;">
-              <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; background: #fff;">
-                  <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; font-weight: bold; margin-bottom: 6px;">SNDS</div>
-                  ${formatSNDS(data.snds_filter)}
-              </div>
-              <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; background: #fff;">
-                  <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; font-weight: bold; margin-bottom: 6px;">Google Rep</div>
-                  ${formatGoogleRep(data.google_rep)}
-              </div>
-              <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; background: #fff;">
-                  <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; font-weight: bold; margin-bottom: 6px;">Complaints</div>
-                  <div style="font-weight: 800; font-size: 1.1rem; color: ${data.complaints > 0.3 ? '#ef4444' : '#334155'};">${data.complaints}%</div>
-              </div>
-              <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; background: #fff;">
-                  <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; font-weight: bold; margin-bottom: 6px;">Traps</div>
-                  <div style="font-weight: 800; font-size: 1.1rem; color: ${data.traps > 0 ? '#ef4444' : '#334155'};">${data.traps}</div>
-              </div>
-          </div>
-      </div>
     `;
     
     document.getElementById('modalBodyContent').innerHTML = bodyHtml;
     (document.getElementById('detailsModal') as HTMLDialogElement).showModal();
   };
 
-  // --- ИДЕАЛЬНАЯ ЛОГИКА СИНХРОНИЗАЦИИ ---
-(window as any).syncData = async (btn) => {
+  (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
       btn.innerHTML = '⏳ 1/4: Fetching Directory...';
@@ -453,7 +432,6 @@ import Layout from '../layouts/Layout.astro';
       const updatePayload = { ips: [], rules: [], relations: [] };
       const chunkSize = 15;
 
-      // 1. Качаем детали IP и связи (used_by)
       for (let i = 0; i < ipIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 2/4: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
         const chunk = ipIds.slice(i, i+chunkSize);
@@ -469,7 +447,6 @@ import Layout from '../layouts/Layout.astro';
           const detail = detailsData[j];
           const usedBy = usedByData[j];
 
-          // Добавляем IP в payload
           if (detail && detail.success && detail.data && detail.data.ip_address) {
             const ipData = detail.data.ip_address;
             updatePayload.ips.push({
@@ -484,9 +461,9 @@ import Layout from '../layouts/Layout.astro';
             });
           }
 
-          // Добавляем связи в payload
-          if (usedBy && usedBy.success && Array.isArray(usedBy.data)) {
-            usedBy.data.forEach(ref => {
+          // ИСПРАВЛЕННАЯ ПРОВЕРКА МАССИВА USED_BY
+          if (usedBy && usedBy.success && usedBy.data && Array.isArray(usedBy.data.used_by)) {
+            usedBy.data.used_by.forEach(ref => {
               updatePayload.relations.push({
                 mta_id: mtaId,
                 used_by_id: ref.id,
@@ -498,7 +475,6 @@ import Layout from '../layouts/Layout.astro';
         }
       }
 
-      // 2. Качаем детали Пулов
       for (let i = 0; i < ruleIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 3/4: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
         const chunk = ruleIds.slice(i, i+chunkSize);
@@ -518,8 +494,7 @@ import Layout from '../layouts/Layout.astro';
         });
       }
 
-      // 3. Отправляем ОДНИМ огромным пакетом в Воркер
-      btn.innerHTML = `⏳ 4/4: Writing to Database...`;
+      btn.innerHTML = `⏳ 4/4: Writing Database...`;
       await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
         method: 'POST', body: JSON.stringify(updatePayload)
       });
