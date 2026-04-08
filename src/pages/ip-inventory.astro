@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="IP Inventory | ivandeliver.email">
   <main class="domains-wrapper">
-    <nav class="tool-nav">
+  <nav class="tool-nav">
       <a href="/deliverability" class="nav-link back-link">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
         Hub
@@ -13,8 +13,7 @@ import Layout from '../layouts/Layout.astro';
       <a href="/domains" class="nav-link">DNS Monitor</a>
       <a href="/monitor" class="nav-link">SNDS</a>
       <a href="/postmaster" class="nav-link">GPT</a>
-      <a href="/ip-inventory" class="nav-link active">IP Inventory</a>
-    </nav>
+      <a href="/ip-inventory" class="nav-link active">IP Inventory</a> </nav>
     <div class="content-header">
       <div class="title-area">
         <h1>Global IP Inventory</h1>
@@ -28,7 +27,8 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
-    <div class="summary-grid" id="inventory-summary"></div>
+    <div class="summary-grid" id="inventory-summary">
+      </div>
 
     <div class="view-tabs">
       <button class="tab-btn active" id="btnViewIps" onclick="window.setView('ips')">IP Addresses</button>
@@ -38,11 +38,13 @@ import Layout from '../layouts/Layout.astro';
     <div id="ipsView">
       <div class="table-actions-bar">
         <div class="left-actions" style="display: flex; gap: 15px; align-items: center;">
-          <input type="text" id="ipSearch" placeholder="Search Name, IP or Pool..." class="input-field search-input" />
+          <input type="text" id="ipSearch" placeholder="Search Name, IP, or Pool..." class="input-field search-input" />
+          
           <select id="poolFilter" class="input-field select-custom" style="width: 250px;">
             <option value="ALL">🌐 All Pools</option>
           </select>
         </div>
+        
         <button class="btn-export" onclick="window.downloadCSV()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           Export CSV
@@ -54,8 +56,8 @@ import Layout from '../layouts/Layout.astro';
           <table>
             <thead>
               <tr>
-                <th class="sortable" onclick="window.sortBy('name')">MTA Name</th>
                 <th class="sortable" onclick="window.sortBy('ip')">IP Address</th>
+                <th class="sortable" onclick="window.sortBy('name')">MTA Name</th>
                 <th class="sortable" onclick="window.sortBy('hostname')">Hostname (PTR)</th>
                 <th class="center sortable" onclick="window.sortBy('throttling_template')">Throttling Template</th>
                 <th>Assigned Pools</th>
@@ -85,7 +87,8 @@ import Layout from '../layouts/Layout.astro';
                 <th class="center">Action</th>
               </tr>
             </thead>
-            <tbody id="poolsTableBody"></tbody>
+            <tbody id="poolsTableBody">
+            </tbody>
           </table>
         </div>
       </div>
@@ -100,7 +103,7 @@ import Layout from '../layouts/Layout.astro';
   
   let enrichedData = [];
   let currentFilteredData = [];
-  let sortCol = 'name';
+  let sortCol = 'ip'; // Сортируем по IP по умолчанию
   let sortAsc = true;
   let activePool = 'ALL';
   let activeStatFilter = 'ALL';
@@ -158,17 +161,11 @@ import Layout from '../layouts/Layout.astro';
       populatePoolDropdowns(Array.from(allPools).sort());
       applyFiltersAndRender();
 
-      // ВОССТАНОВЛЕННЫЕ СЛУШАТЕЛИ ДЛЯ ПОИСКА
-      const searchInput = document.getElementById('ipSearch');
-      if (searchInput) searchInput.addEventListener('input', applyFiltersAndRender);
-      
-      const poolFilter = document.getElementById('poolFilter');
-      if (poolFilter) {
-        poolFilter.addEventListener('change', (e) => {
-          activePool = (e.target as HTMLSelectElement).value;
-          applyFiltersAndRender();
-        });
-      }
+      document.getElementById('ipSearch')?.addEventListener('input', applyFiltersAndRender);
+      document.getElementById('poolFilter')?.addEventListener('change', (e) => {
+        activePool = (e.target as HTMLSelectElement).value;
+        applyFiltersAndRender();
+      });
 
     } catch (err) {
       console.error("Data Merge Error:", err);
@@ -187,10 +184,9 @@ import Layout from '../layouts/Layout.astro';
     const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
     let searchFiltered = enrichedData.filter(d => {
-      // Безопасный поиск с защитой от null
-      const safeName = (d.name || '').toLowerCase();
-      const safeIp = (d.ip || '').toLowerCase();
-      const safeHost = (d.hostname || '').toLowerCase();
+      const safeName = d.name.toLowerCase();
+      const safeIp = d.ip.toLowerCase();
+      const safeHost = d.hostname.toLowerCase();
 
       const matchSearch = safeName.includes(searchTerm) || 
                           safeIp.includes(searchTerm) || 
@@ -215,7 +211,9 @@ import Layout from '../layouts/Layout.astro';
       let valA = a[sortCol]; let valB = b[sortCol];
       if (sortCol === 'ip') {
         const numA = ipToNumber(a.ip); const numB = ipToNumber(b.ip);
-        return sortAsc ? numA - numB : numB - numA;
+        if (numA !== numB) return sortAsc ? numA - numB : numB - numA;
+        // Вторичная сортировка по имени, чтобы MTAs одного IP стояли рядом
+        return a.name.localeCompare(b.name);
       }
       let strA = String(valA || '').toLowerCase(); let strB = String(valB || '').toLowerCase();
       return sortAsc ? strA.localeCompare(strB) : strB.localeCompare(strA);
@@ -234,15 +232,19 @@ import Layout from '../layouts/Layout.astro';
   function renderSummary(data) {
     const container = document.getElementById('inventory-summary');
     if (!container) return;
-    const sndsRed = data.filter(d => d.snds_filter === 'RED').length;
-    const trapCount = data.filter(d => d.traps > 0).length;
-    const googleBad = data.filter(d => d.google_rep === 'BAD' || d.google_rep === 'LOW').length;
+    
+    // Считаем уникальные физические IP для статистики
+    const uniqueIps = new Set(data.map(d => d.ip)).size;
+    const sndsRed = new Set(data.filter(d => d.snds_filter === 'RED').map(d => d.ip)).size;
+    const trapCount = new Set(data.filter(d => d.traps > 0).map(d => d.ip)).size;
+    const googleBad = new Set(data.filter(d => d.google_rep === 'BAD' || d.google_rep === 'LOW').map(d => d.ip)).size;
+    
     const getActiveCls = (filter) => activeStatFilter === filter ? 'active-filter' : '';
 
     container.innerHTML = `
       <div class="stat-card info ${getActiveCls('ALL')}" onclick="window.setStatFilter('ALL')">
-        <span class="stat-label">Total MTAs</span>
-        <span class="stat-value">${data.length}</span>
+        <span class="stat-label">Total Physical IPs</span>
+        <span class="stat-value">${uniqueIps}</span>
       </div>
       <div class="stat-card ${sndsRed > 0 ? 'danger' : 'success'} ${getActiveCls('RED')}" onclick="window.setStatFilter('RED')">
         <span class="stat-label">SNDS: Red Status</span>
@@ -259,6 +261,7 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
+  // НОВАЯ ФУНКЦИЯ ОТРИСОВКИ (Группировка по IP через Rowspan)
   function renderTable(data) {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
@@ -266,25 +269,61 @@ import Layout from '../layouts/Layout.astro';
       tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 20px;">No matching records found.</td></tr>`;
       return;
     }
-    tbody.innerHTML = data.map(row => {
-      const poolBadges = row.pools.length > 0 
-        ? row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
-        : `<span class="text-gray">—</span>`;
-      const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
-      return `
-        <tr class="domain-row ${isCritical ? 'row-alert' : ''}" title="Managed via GreenArrow">
-          <td class="domain-text"><strong>${row.name}</strong></td>
-          <td style="font-family: monospace;">${row.ip}</td>
-          <td style="color: #4a5568;">${row.hostname}</td>
-          <td class="center"><span class="badge badge-gray">${row.throttling_template}</span></td>
-          <td><div class="pools-container">${poolBadges}</div></td>
-          <td class="center">${formatSNDS(row.snds_filter)}</td>
-          <td class="center" style="${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
-          <td class="center" style="${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
-          <td class="center">${formatGoogleRep(row.google_rep)}</td>
-        </tr>
-      `;
-    }).join('');
+
+    // Группируем данные по IP
+    const grouped = {};
+    data.forEach(row => {
+      if (!grouped[row.ip]) grouped[row.ip] = [];
+      grouped[row.ip].push(row);
+    });
+
+    let html = '';
+    // Сохраняем порядок IP адресов из отсортированного массива
+    const orderedIps = [...new Set(data.map(d => d.ip))];
+
+    orderedIps.forEach(ip => {
+      const rows = grouped[ip];
+      const rowSpan = rows.length;
+      const firstRow = rows[0];
+      const isCritical = firstRow.snds_filter === 'RED' || firstRow.google_rep === 'BAD' || firstRow.traps > 0;
+      const bgClass = isCritical ? 'row-alert' : '';
+
+      // Отрисовка первой строки для IP (содержит rowspan для общих данных)
+      html += `<tr class="domain-row ${bgClass}" style="border-top: 2px solid #cbd5e0;">`;
+      html += `<td rowspan="${rowSpan}" style="font-family: monospace; font-size: 1.05rem; font-weight: bold; background: ${isCritical ? '#fff5f5' : '#f7fafc'}; border-right: 1px solid #e2e8f0; vertical-align: top; padding-top: 15px;">${ip}</td>`;
+      
+      html += renderMtaColumns(firstRow);
+
+      // Статистика (Общая для IP)
+      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px; border-left: 1px solid #e2e8f0;">${formatSNDS(firstRow.snds_filter)}</td>`;
+      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px; ${firstRow.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${firstRow.complaints}%</td>`;
+      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px; ${firstRow.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${firstRow.traps > 0 ? '🚨 ' + firstRow.traps : '0'}</td>`;
+      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px;">${formatGoogleRep(firstRow.google_rep)}</td>`;
+      html += `</tr>`;
+
+      // Отрисовка остальных MTA для этого же IP (без колонок статистики)
+      for (let i = 1; i < rowSpan; i++) {
+        html += `<tr class="domain-row ${bgClass}">`;
+        html += renderMtaColumns(rows[i]);
+        html += `</tr>`;
+      }
+    });
+
+    tbody.innerHTML = html;
+  }
+
+  // Вспомогательная функция для отрисовки специфичных для MTA колонок
+  function renderMtaColumns(row) {
+    const poolBadges = row.pools.length > 0 
+      ? row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
+      : `<span class="text-gray">—</span>`;
+    
+    return `
+      <td class="domain-text"><strong>${row.name}</strong></td>
+      <td style="color: #4a5568;">${row.hostname}</td>
+      <td class="center"><span class="badge badge-gray">${row.throttling_template}</span></td>
+      <td><div class="pools-container">${poolBadges}</div></td>
+    `;
   }
 
   function renderPoolsView(data) {
@@ -322,17 +361,30 @@ import Layout from '../layouts/Layout.astro';
       const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
       const lists = await listRes.json();
       const ruleIds = lists.rules.map(r => r.id);
-      const mtaIds = lists.mtas.map(r => r.id); // ИСПОЛЬЗУЕМ MTAs
+      const mtaIds = lists.mtas.map(r => r.id);
 
-      const mtaNameToPools = {};
-      const scanRule = (obj, poolName) => {
+      const mtaNameToPools = {};       // Прямые связи: MTA -> Set(Pools)
+      const ruleDependencies = {};     // Вложенные правила: Rule -> Set(SubRules)
+
+      // ФАЗА 1: Сканируем сырые данные и строим граф
+      const scanRule = (obj, parentRuleName) => {
         if (!obj || typeof obj !== 'object') return;
+        
+        // Если нашли прямой MTA
         if (obj.virtual_mta && obj.virtual_mta.name) {
           const mta = obj.virtual_mta.name;
           if (!mtaNameToPools[mta]) mtaNameToPools[mta] = new Set();
-          mtaNameToPools[mta].add(poolName);
+          mtaNameToPools[mta].add(parentRuleName);
         }
-        Object.values(obj).forEach(v => scanRule(v, poolName));
+        
+        // Если нашли вложенное Routing Rule
+        if (obj.routing_rule && obj.routing_rule.name) {
+          const subRule = obj.routing_rule.name;
+          if (!ruleDependencies[parentRuleName]) ruleDependencies[parentRuleName] = new Set();
+          ruleDependencies[parentRuleName].add(subRule);
+        }
+
+        Object.values(obj).forEach(v => scanRule(v, parentRuleName));
       };
 
       const chunkSize = 15;
@@ -345,17 +397,38 @@ import Layout from '../layouts/Layout.astro';
         details.forEach(d => { if(d?.success) scanRule(d.data.routing_rule, d.data.routing_rule.name); });
       }
 
+      // ФАЗА 2: Разрешаем граф зависимостей (Пробрасываем пулы сквозь вложенные правила)
+      let changed = true;
+      while(changed) {
+        changed = false;
+        Object.keys(mtaNameToPools).forEach(mta => {
+          const pools = mtaNameToPools[mta];
+          const initialSize = pools.size;
+          
+          pools.forEach(pool => {
+            // Если этот пул является под-правилом для родителя, то MTA также принадлежит родителю
+            Object.keys(ruleDependencies).forEach(parentRule => {
+              if (ruleDependencies[parentRule].has(pool)) {
+                pools.add(parentRule);
+              }
+            });
+          });
+          if (pools.size > initialSize) changed = true;
+        });
+      }
+
+      // ФАЗА 3: Синхронизируем MTA
       const updatePayload = [];
       for (let i = 0; i < mtaIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 3/4: MTAs (${Math.min(i+chunkSize, mtaIds.length)}/${mtaIds.length})...`;
         const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
-          method: 'POST', body: JSON.stringify({ type: 'virtual_mtas', ids: mtaIds.slice(i, i+chunkSize) }) // ИСПОЛЬЗУЕМ VIRTUAL_MTAS
+          method: 'POST', body: JSON.stringify({ type: 'virtual_mtas', ids: mtaIds.slice(i, i+chunkSize) })
         });
         const details = await res.json();
         details.forEach(d => {
           if(!d?.success) return;
           const mtaData = d.data.virtual_mta;
-          if (!mtaData.ip_address) return; // Пропускаем те, где нет IP
+          if (!mtaData.ip_address) return; // Пропускаем системные маунты без IP
           
           const pools = mtaNameToPools[mtaData.name] ? Array.from(mtaNameToPools[mtaData.name]) : [];
           updatePayload.push({
@@ -368,21 +441,23 @@ import Layout from '../layouts/Layout.astro';
         });
       }
 
+      // ФАЗА 4: Сохранение
       for (let i = 0; i < updatePayload.length; i += 50) {
         btn.innerHTML = `⏳ 4/4: Saving... (${Math.min(i+50, updatePayload.length)}/${updatePayload.length})`;
         await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
           method: 'POST', body: JSON.stringify(updatePayload.slice(i, i+50))
         });
       }
+
       await init();
     } catch (err) { console.error(err); alert("Sync failed. Check Console."); }
     finally { btn.innerHTML = originalText; btn.disabled = false; }
   };
 
   (window as any).downloadCSV = () => {
-    const headers = ['MTA Name', 'IP', 'Hostname', 'Template', 'Pools', 'SNDS', 'Complaints', 'Traps', 'Google'];
+    const headers = ['IP', 'MTA Name', 'Hostname', 'Template', 'Pools', 'SNDS', 'Complaints', 'Traps', 'Google'];
     const csv = [headers.join(','), ...currentFilteredData.map(d => [
-      d.name, d.ip, d.hostname, d.throttling_template, `"${d.pools.join(', ')}"`, d.snds_filter, d.complaints, d.traps, d.google_rep
+      d.ip, d.name, d.hostname, d.throttling_template, `"${d.pools.join(', ')}"`, d.snds_filter, d.complaints, d.traps, d.google_rep
     ].join(','))].join('\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -433,7 +508,7 @@ import Layout from '../layouts/Layout.astro';
   .sortable { cursor: pointer; }
   .sortable:hover { background: #edf2f7 !important; }
   td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; color: #2d3748 !important; }
-  .domain-row { cursor: pointer; transition: background 0.1s ease; }
+  .domain-row { transition: background 0.1s ease; }
   .domain-row:hover { background-color: #edf2f7 !important; }
   .row-alert { background-color: #fff5f5 !important; }
   .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 900; }
