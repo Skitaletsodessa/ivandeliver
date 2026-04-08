@@ -15,17 +15,16 @@ jobs:
   run-sync:
     runs-on: ubuntu-latest
 
-    steps:
-      # Шаг 1: Скачиваем код твоего репозитория на сервер GitHub
+steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Шаг 2: Устанавливаем современную версию Node.js (где уже есть встроенный fetch)
       - name: Setup Node.js
         uses: actions/setup-node@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # Заставляет сами экшены GitHub использовать новую версию
         with:
-          node-version: '20'
+          node-version: '24' # Меняем 20 на 24
 
-      # Шаг 3: Запускаем наш скрипт!
       - name: Run Sync Script
         run: node sync.js
