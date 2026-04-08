@@ -437,70 +437,92 @@ import Layout from '../layouts/Layout.astro';
   };
 
   // --- ИДЕАЛЬНАЯ ЛОГИКА СИНХРОНИЗАЦИИ ---
-  (window as any).syncData = async (btn) => {
+(window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
       btn.innerHTML = '⏳ 1/4: Fetching Directory...';
       const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
       const lists = await listRes.json();
       
-      // Отбираем только ID сущностей типа ip_address
       const ipMtas = lists.mtas.filter(m => m.type === 'ip_address' || !m.type);
+      const ruleMtas = lists.mtas.filter(m => m.type === 'routing_rule');
+      
       const ipIds = ipMtas.map(r => r.id);
+      const ruleIds = ruleMtas.map(r => r.id);
 
-      const updatePayload = [];
+      const updatePayload = { ips: [], rules: [], relations: [] };
       const chunkSize = 15;
 
+      // 1. Качаем детали IP и связи (used_by)
       for (let i = 0; i < ipIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 2/4: Syncing Details (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
+        btn.innerHTML = `⏳ 2/4: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
         const chunk = ipIds.slice(i, i+chunkSize);
         
-        // 1. Получаем инфо об IP (хостнейм, темплейт)
-        const detailsRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
-          method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk })
-        });
+        const detailsRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk }) });
         const detailsData = await detailsRes.json();
 
-        // 2. Получаем пулы (через used_by)
-        const usedByRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
-          method: 'POST', body: JSON.stringify({ type: 'used_by', ids: chunk })
-        });
+        const usedByRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'used_by', ids: chunk }) });
         const usedByData = await usedByRes.json();
 
-        // 3. Объединяем
         for (let j = 0; j < chunk.length; j++) {
+          const mtaId = chunk[j];
           const detail = detailsData[j];
           const usedBy = usedByData[j];
 
+          // Добавляем IP в payload
           if (detail && detail.success && detail.data && detail.data.ip_address) {
             const ipData = detail.data.ip_address;
-            
-            let pools = [];
-            // Извлекаем имена пулов (routing rules) из массива used_by
-            if (usedBy && usedBy.success && Array.isArray(usedBy.data)) {
-               pools = usedBy.data
-                 .filter(ref => ref.type === 'routing_rule')
-                 .map(ref => ref.name);
-            }
+            updatePayload.ips.push({
+              id: ipData.id,
+              name: ipData.name,
+              ip: ipData.ip || null,
+              hostname: ipData.hostname || null,
+              delivery_paused: ipData.delivery_paused ? 1 : 0,
+              throttling_template_id: ipData.throttling_template?.id || null,
+              throttling_template_name: ipData.throttling_template?.name || null,
+              raw_json: JSON.stringify(ipData)
+            });
+          }
 
-            updatePayload.push({
-              name: ipData.name, 
-              ip_address: ipData.ip || '', 
-              hostname: ipData.hostname || '—',
-              pools: JSON.stringify(pools), 
-              throttling_template: ipData.throttling_template?.name || ''
+          // Добавляем связи в payload
+          if (usedBy && usedBy.success && Array.isArray(usedBy.data)) {
+            usedBy.data.forEach(ref => {
+              updatePayload.relations.push({
+                mta_id: mtaId,
+                used_by_id: ref.id,
+                used_by_type: ref.type,
+                used_by_name: ref.name
+              });
             });
           }
         }
       }
 
-      // Сохраняем
-      for (let i = 0; i < updatePayload.length; i += 50) {
-        btn.innerHTML = `⏳ 4/4: Saving... (${Math.min(i+50, updatePayload.length)}/${updatePayload.length})`;
-        await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
-          method: 'POST', body: JSON.stringify(updatePayload.slice(i, i+50))
+      // 2. Качаем детали Пулов
+      for (let i = 0; i < ruleIds.length; i += chunkSize) {
+        btn.innerHTML = `⏳ 3/4: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
+        const chunk = ruleIds.slice(i, i+chunkSize);
+        const rulesRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: chunk }) });
+        const rulesData = await rulesRes.json();
+
+        rulesData.forEach(r => {
+          if (r && r.success && r.data && r.data.routing_rule) {
+            const ruleData = r.data.routing_rule;
+            updatePayload.rules.push({
+              id: ruleData.id,
+              name: ruleData.name,
+              randomization_type: ruleData.default?.randomization_type || null,
+              raw_json: JSON.stringify(ruleData)
+            });
+          }
         });
       }
+
+      // 3. Отправляем ОДНИМ огромным пакетом в Воркер
+      btn.innerHTML = `⏳ 4/4: Writing to Database...`;
+      await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
+        method: 'POST', body: JSON.stringify(updatePayload)
+      });
 
       await init();
     } catch (err) { console.error(err); alert("Sync failed. Check Console."); }
