@@ -32,7 +32,7 @@ import Layout from '../layouts/Layout.astro';
 
     <div class="view-tabs">
       <button class="tab-btn active" id="btnViewIps" onclick="window.setView('ips')">IP Addresses</button>
-      <button class="tab-btn" id="btnViewPools" onclick="window.setView('pools')">Pools Management</button>
+      <button class="tab-btn" id="btnViewPools" onclick="window.setView('pools')">Send Pools</button>
     </div>
 
     <div id="ipsView">
@@ -80,8 +80,8 @@ import Layout from '../layouts/Layout.astro';
             <thead>
               <tr>
                 <th>Pool Name</th>
-                <th class="center">MTA Count</th>
-                <th>Assigned MTAs</th>
+                <th class="center">IP Count</th>
+                <th>Assigned IPs (MTAs)</th>
                 <th class="center">Action</th>
               </tr>
             </thead>
@@ -97,10 +97,7 @@ import Layout from '../layouts/Layout.astro';
           <h2 id="modalTitle">MTA Details</h2>
           <button onclick="document.getElementById('detailsModal').close()" class="close-btn">&times;</button>
         </div>
-        
-        <div class="modal-body" id="modalBodyContent">
-           </div>
-
+        <div class="modal-body" id="modalBodyContent"></div>
         <div class="modal-footer" style="background: #f8fafc; padding: 1.5rem; border-top: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
@@ -112,9 +109,19 @@ import Layout from '../layouts/Layout.astro';
                     Load Stats
                 </button>
             </div>
-            <div id="statsContainer" style="display: none; margin-top: 15px; padding: 15px; background: #fff; border: 1px dashed #cbd5e0; border-radius: 8px;">
-                </div>
+            <div id="statsContainer" style="display: none; margin-top: 15px; padding: 15px; background: #fff; border: 1px dashed #cbd5e0; border-radius: 8px;"></div>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="poolModal" class="modal" style="max-width: 900px;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="poolModalTitle">Pool Details</h2>
+          <button onclick="document.getElementById('poolModal').close()" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body" id="poolModalBodyContent" style="max-height: 65vh; overflow-y: auto; padding: 1.5rem;">
+           </div>
       </div>
     </dialog>
 
@@ -348,19 +355,53 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
+  // ОБНОВЛЕННАЯ ФУНКЦИЯ ДЛЯ ВКЛАДКИ SEND POOLS
   function renderPoolsView(data) {
     const poolMap = {};
-    data.forEach(d => { d.pools.forEach(p => { if(!poolMap[p]) poolMap[p] = []; poolMap[p].push(d.name); }); });
+    data.forEach(d => { 
+      d.pools.forEach(p => { 
+        if(!poolMap[p]) poolMap[p] = []; 
+        // Сохраняем весь объект IP/MTA для анализа репутации
+        poolMap[p].push(d); 
+      }); 
+    });
+    
     const tbody = document.getElementById('poolsTableBody');
     if (!tbody) return;
+
     tbody.innerHTML = Object.keys(poolMap).sort().map(poolName => {
       const mtas = poolMap[poolName];
+      const ipCount = mtas.length;
+
+      // Анализируем общую репутацию пула (GPT)
+      let hasBad = false;
+      let hasMedium = false;
+      let hasHigh = false;
+
+      mtas.forEach(m => {
+        if (m.google_rep === 'BAD' || m.google_rep === 'LOW') hasBad = true;
+        else if (m.google_rep === 'MEDIUM') hasMedium = true;
+        else if (m.google_rep === 'HIGH') hasHigh = true;
+      });
+
+      let badgeCls = 'badge-gray';
+      if (hasBad) badgeCls = 'badge-red';
+      else if (hasMedium) badgeCls = 'badge-yellow';
+      else if (hasHigh) badgeCls = 'badge-green';
+
+      // Формируем список MTA для колонки (обрезаем если больше 5)
+      const mtaNames = mtas.map(m => m.name);
+      let mtaDisplay = mtaNames.slice(0, 5).join(', ');
+      if (mtaNames.length > 5) {
+        mtaDisplay += ` <span style="color: #a0aec0; font-style: italic;">(+${mtaNames.length - 5} more)</span>`;
+      }
+
       return `
-        <tr class="domain-row">
-          <td><strong style="color: #2d3748;">${poolName}</strong></td>
-          <td class="center"><span class="badge badge-gray">${mtas.length} MTAs</span></td>
-          <td style="font-size: 0.85rem; color: #4a5568;">${mtas.join(', ')}</td>
-          <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="window.jumpToPool('${poolName}')">Manage</button></td>
+        <tr class="domain-row" onclick="window.openPoolModal('${poolName}')">
+          <td><strong style="color: #2d3748; font-size: 1.05rem;">${poolName}</strong></td>
+          <td class="center"><span class="badge ${badgeCls}" style="font-size: 0.85rem; padding: 6px 12px;">${ipCount} IPs</span></td>
+          <td style="font-size: 0.9rem; color: #4a5568;">${mtaDisplay}</td>
+          <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="event.stopPropagation(); window.openPoolModal('${poolName}')">Manage</button></td>
         </tr>
       `;
     }).join('') || `<tr><td colspan="4" class="center">No pools found.</td></tr>`;
@@ -376,6 +417,7 @@ import Layout from '../layouts/Layout.astro';
     return `<span class="badge ${cls}">${r}</span>`;
   }
 
+  // ОТКРЫТИЕ ДЕТАЛЕЙ ОДНОГО MTA
   (window as any).openDetailsModal = (mtaName) => {
     const data = enrichedData.find(d => d.name === mtaName);
     if (!data) return;
@@ -415,7 +457,64 @@ import Layout from '../layouts/Layout.astro';
     (document.getElementById('detailsModal') as HTMLDialogElement).showModal();
   };
 
-  // --- ИНТЕЛЛЕКТУАЛЬНАЯ ПАКЕТНАЯ СИНХРОНИЗАЦИЯ ---
+  // НОВАЯ ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ МОДАЛКИ С ДЕТАЛЯМИ ПУЛА
+  (window as any).openPoolModal = (poolName) => {
+    // Находим все IP, привязанные к этому пулу
+    const poolData = enrichedData.filter(d => d.pools.includes(poolName));
+    if (!poolData || poolData.length === 0) return;
+
+    document.getElementById('poolModalTitle').innerText = `Send Pool: ${poolName}`;
+
+    // Сортируем по IP для красивого отображения
+    poolData.sort((a, b) => ipToNumber(a.ip) - ipToNumber(b.ip));
+
+    let rowsHtml = poolData.map(row => {
+      const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
+      return `
+        <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.1s; ${isCritical ? 'background: #fff5f5;' : ''}" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='${isCritical ? '#fff5f5' : 'transparent'}'">
+          <td style="padding: 12px; font-weight: bold; color: #2d3748;">${row.name}</td>
+          <td style="padding: 12px; font-family: monospace; font-size: 0.95rem;">${row.ip}</td>
+          <td class="center" style="padding: 12px;">${formatSNDS(row.snds_filter)}</td>
+          <td class="center" style="padding: 12px; ${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
+          <td class="center" style="padding: 12px; ${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
+          <td class="center" style="padding: 12px;">${formatGoogleRep(row.google_rep)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const html = `
+      <div style="background: #f8fafc; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0;">
+          <div>
+              <span style="font-size: 0.8rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Included IPs</span>
+              <div style="font-size: 1.5rem; font-weight: 800; color: #0f172a;">${poolData.length}</div>
+          </div>
+          <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="document.getElementById('poolModal').close(); window.jumpToPool('${poolName}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+              Filter in Main View
+          </button>
+      </div>
+      
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
+        <thead>
+          <tr style="background: #edf2f7; text-align: left; border-bottom: 2px solid #cbd5e0;">
+            <th style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">MTA Name</th>
+            <th style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">IP Address</th>
+            <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">SNDS</th>
+            <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">Complaints</th>
+            <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">Traps</th>
+            <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">Google Rep</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    `;
+
+    document.getElementById('poolModalBodyContent').innerHTML = html;
+    (document.getElementById('poolModal') as HTMLDialogElement).showModal();
+  };
+
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
@@ -424,14 +523,13 @@ import Layout from '../layouts/Layout.astro';
       const lists = await listRes.json();
       
       const ipMtas = lists.mtas.filter(m => m.type === 'ip_address' || !m.type);
-      const ruleMtas = lists.rules || []; // Используем надежный список правил из второго запроса воркера
+      const ruleMtas = lists.rules || []; 
       
       const ipIds = ipMtas.map(r => r.id);
       const ruleIds = ruleMtas.map(r => r.id);
 
       const chunkSize = 15;
 
-      // 1. Обработка IP и Связей (с мгновенным сохранением в базу)
       for (let i = 0; i < ipIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 2/3: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
         const chunk = ipIds.slice(i, i+chunkSize);
@@ -475,7 +573,6 @@ import Layout from '../layouts/Layout.astro';
           }
         }
 
-        // Сохраняем эту пачку немедленно
         if (batchPayload.ips.length > 0 || batchPayload.relations.length > 0 || batchPayload.processed_mta_ids.length > 0) {
             await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
               method: 'POST', body: JSON.stringify(batchPayload)
@@ -483,7 +580,6 @@ import Layout from '../layouts/Layout.astro';
         }
       }
 
-      // 2. Обработка Пулов (с мгновенным сохранением)
       for (let i = 0; i < ruleIds.length; i += chunkSize) {
         btn.innerHTML = `⏳ 3/3: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
         const chunk = ruleIds.slice(i, i+chunkSize);
@@ -536,7 +632,12 @@ import Layout from '../layouts/Layout.astro';
     document.getElementById('btnViewIps').classList.toggle('active', v === 'ips');
     document.getElementById('btnViewPools').classList.toggle('active', v === 'pools');
   };
-  (window as any).jumpToPool = (p) => { activePool = p; (document.getElementById('poolFilter') as HTMLSelectElement).value = p; (window as any).setView('ips'); applyFiltersAndRender(); };
+  (window as any).jumpToPool = (p) => { 
+    activePool = p; 
+    (document.getElementById('poolFilter') as HTMLSelectElement).value = p; 
+    (window as any).setView('ips'); 
+    applyFiltersAndRender(); 
+  };
 
   init();
 </script>
@@ -572,7 +673,6 @@ import Layout from '../layouts/Layout.astro';
   .sortable:hover { background: #edf2f7 !important; }
   td { padding: 14px 12px; border-bottom: 1px solid #edf2f7; font-size: 0.95rem; color: #2d3748 !important; }
   
-  /* Эффект кликабельной строки */
   .domain-row { transition: background 0.1s ease; cursor: pointer; }
   .domain-row:hover { background-color: #edf2f7 !important; }
   
@@ -592,7 +692,7 @@ import Layout from '../layouts/Layout.astro';
   .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: 0.2s; }
   .tab-btn.active { background: #3182ce; color: #fff; }
 
-  /* Стили для нового модального окна */
+  /* Стили для модальных окон */
   .modal { border: none; border-radius: 12px; padding: 0; width: 95%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); background: #fff; color: #1a202c; }
   .modal::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
   .modal-content { display: flex; flex-direction: column; }
