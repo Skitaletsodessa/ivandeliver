@@ -375,7 +375,6 @@ import Layout from '../layouts/Layout.astro';
     return `<span class="badge ${cls}">${r}</span>`;
   }
 
-  // ОТРИСОВКА НОВОГО МОДАЛЬНОГО ОКНА ДЕТАЛЕЙ
   (window as any).openDetailsModal = (mtaName) => {
     const data = enrichedData.find(d => d.name === mtaName);
     if (!data) return;
@@ -437,81 +436,65 @@ import Layout from '../layouts/Layout.astro';
     (document.getElementById('detailsModal') as HTMLDialogElement).showModal();
   };
 
+  // --- ИДЕАЛЬНАЯ ЛОГИКА СИНХРОНИЗАЦИИ ---
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
-      btn.innerHTML = '⏳ 1/4: Lists...';
+      btn.innerHTML = '⏳ 1/4: Fetching Directory...';
       const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
       const lists = await listRes.json();
-      const ruleIds = lists.rules.map(r => r.id);
-      const mtaIds = lists.mtas.map(r => r.id);
-
-      const mtaNameToPools = {};
-      const ruleDependencies = {};
-
-      const scanRule = (obj, parentRuleName) => {
-        if (!obj || typeof obj !== 'object') return;
-        if (obj.virtual_mta && obj.virtual_mta.name) {
-          const mta = obj.virtual_mta.name;
-          if (!mtaNameToPools[mta]) mtaNameToPools[mta] = new Set();
-          mtaNameToPools[mta].add(parentRuleName);
-        }
-        if (obj.routing_rule && obj.routing_rule.name) {
-          const subRule = obj.routing_rule.name;
-          if (!ruleDependencies[parentRuleName]) ruleDependencies[parentRuleName] = new Set();
-          ruleDependencies[parentRuleName].add(subRule);
-        }
-        Object.values(obj).forEach(v => scanRule(v, parentRuleName));
-      };
-
-      const chunkSize = 15;
-      for (let i = 0; i < ruleIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 2/4: Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
-        const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
-          method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: ruleIds.slice(i, i+chunkSize) })
-        });
-        const details = await res.json();
-        details.forEach(d => { if(d?.success) scanRule(d.data.routing_rule, d.data.routing_rule.name); });
-      }
-
-      let changed = true;
-      while(changed) {
-        changed = false;
-        Object.keys(mtaNameToPools).forEach(mta => {
-          const pools = mtaNameToPools[mta];
-          const initialSize = pools.size;
-          pools.forEach(pool => {
-            Object.keys(ruleDependencies).forEach(parentRule => {
-              if (ruleDependencies[parentRule].has(pool)) pools.add(parentRule);
-            });
-          });
-          if (pools.size > initialSize) changed = true;
-        });
-      }
+      
+      // Отбираем только ID сущностей типа ip_address
+      const ipMtas = lists.mtas.filter(m => m.type === 'ip_address' || !m.type);
+      const ipIds = ipMtas.map(r => r.id);
 
       const updatePayload = [];
-      for (let i = 0; i < mtaIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 3/4: MTAs (${Math.min(i+chunkSize, mtaIds.length)}/${mtaIds.length})...`;
-        const res = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
-          method: 'POST', body: JSON.stringify({ type: 'virtual_mtas', ids: mtaIds.slice(i, i+chunkSize) })
+      const chunkSize = 15;
+
+      for (let i = 0; i < ipIds.length; i += chunkSize) {
+        btn.innerHTML = `⏳ 2/4: Syncing Details (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
+        const chunk = ipIds.slice(i, i+chunkSize);
+        
+        // 1. Получаем инфо об IP (хостнейм, темплейт)
+        const detailsRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
+          method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk })
         });
-        const details = await res.json();
-        details.forEach(d => {
-          if(!d?.success) return;
-          const mtaData = d.data.virtual_mta;
-          if (!mtaData.ip_address) return;
-          
-          const pools = mtaNameToPools[mtaData.name] ? Array.from(mtaNameToPools[mtaData.name]) : [];
-          updatePayload.push({
-            name: mtaData.name, 
-            ip_address: mtaData.ip_address, 
-            hostname: mtaData.hostname || '—',
-            pools: JSON.stringify(pools), 
-            throttling_template: mtaData.throttling_template?.name || ''
-          });
+        const detailsData = await detailsRes.json();
+
+        // 2. Получаем пулы (через used_by)
+        const usedByRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', {
+          method: 'POST', body: JSON.stringify({ type: 'used_by', ids: chunk })
         });
+        const usedByData = await usedByRes.json();
+
+        // 3. Объединяем
+        for (let j = 0; j < chunk.length; j++) {
+          const detail = detailsData[j];
+          const usedBy = usedByData[j];
+
+          if (detail && detail.success && detail.data && detail.data.ip_address) {
+            const ipData = detail.data.ip_address;
+            
+            let pools = [];
+            // Извлекаем имена пулов (routing rules) из массива used_by
+            if (usedBy && usedBy.success && Array.isArray(usedBy.data)) {
+               pools = usedBy.data
+                 .filter(ref => ref.type === 'routing_rule')
+                 .map(ref => ref.name);
+            }
+
+            updatePayload.push({
+              name: ipData.name, 
+              ip_address: ipData.ip || '', 
+              hostname: ipData.hostname || '—',
+              pools: JSON.stringify(pools), 
+              throttling_template: ipData.throttling_template?.name || ''
+            });
+          }
+        }
       }
 
+      // Сохраняем
       for (let i = 0; i < updatePayload.length; i += 50) {
         btn.innerHTML = `⏳ 4/4: Saving... (${Math.min(i+50, updatePayload.length)}/${updatePayload.length})`;
         await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
