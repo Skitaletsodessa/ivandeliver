@@ -301,10 +301,21 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
+  // --- HASH ROUTER И МОДАЛКИ ---
+  (window as any).closeAllModals = () => {
+      ['detailsModal', 'sendPoolModal', 'ipPoolModal'].forEach(id => {
+          const m = document.getElementById(id);
+          if (m && (m as HTMLDialogElement).open) (m as HTMLDialogElement).close();
+      });
+  };
+
   (window as any).handleHashRouter = () => {
       const hash = window.location.hash.substring(1);
       if (!hash) return;
       
+      // Сначала жестко закрываем все окна
+      (window as any).closeAllModals();
+
       const params = new URLSearchParams(hash);
       if (params.has('mta')) {
           (window as any).setView('ips');
@@ -318,6 +329,7 @@ import Layout from '../layouts/Layout.astro';
       } else if (params.has('throttle')) {
           (window as any).setView('throttles');
           alert(`Configuration panel for template: "${params.get('throttle')}"\n(UI Implementation pending in next update)`);
+          history.replaceState(null, null, ' '); // Очищаем хэш
       }
   };
 
@@ -534,6 +546,7 @@ import Layout from '../layouts/Layout.astro';
     if (!tbody) return;
     
     tbody.innerHTML = filtered.map(r => {
+        // Умная функция проверки типа ноды
         const isIpPool = (name) => enrichedData.some(d => d.pools.includes(name));
         
         let nestedRulesDisplay = r.default_route.rules.map(n => {
@@ -607,7 +620,7 @@ import Layout from '../layouts/Layout.astro';
     const data = enrichedData.find(d => d.name === mtaName);
     if (!data) return;
     document.getElementById('modalTitle').innerText = `MTA: ${data.name}`;
-    const poolBadges = data.pools.length > 0 ? data.pools.map(p => `<a href="#ippool=${encodeURIComponent(p)}" class="pool-tag" onclick="(document.getElementById('detailsModal') as any).close()">${p}</a>`).join(' ') : `<span class="text-gray" style="font-style: italic;">No pools assigned</span>`;
+    const poolBadges = data.pools.length > 0 ? data.pools.map(p => `<a href="#ippool=${encodeURIComponent(p)}" class="pool-tag">${p}</a>`).join(' ') : `<span class="text-gray" style="font-style: italic;">No pools assigned</span>`;
 
     document.getElementById('modalBodyContent').innerHTML = `
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
@@ -622,7 +635,7 @@ import Layout from '../layouts/Layout.astro';
       </div>
       <div style="margin-bottom: 20px;">
           <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px;">Throttling Template</div>
-          <div><a href="#throttle=${encodeURIComponent(data.throttling_template)}" class="badge badge-gray link-badge" onclick="(document.getElementById('detailsModal') as any).close()">${data.throttling_template}</a></div>
+          <div><a href="#throttle=${encodeURIComponent(data.throttling_template)}" class="badge badge-gray link-badge">${data.throttling_template}</a></div>
       </div>
       <div style="margin-bottom: 20px;">
           <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px;">Assigned Pools</div>
@@ -637,39 +650,46 @@ import Layout from '../layouts/Layout.astro';
     if (!rule) return;
     document.getElementById('sendPoolModalTitle').innerText = `Send Pool: ${rule.name}`;
     
-    const isIpPool = (name) => enrichedData.some(d => d.pools.includes(name));
+    // Универсальная функция, которая сама определяет, куда должна вести ссылка
+    const resolveNode = (n) => {
+        const isIpPool = enrichedData.some(d => d.pools.includes(n.name));
+        const isSendPool = enrichedRules.some(r => r.name === n.name);
+        
+        let hash = `#mta=${encodeURIComponent(n.name)}`;
+        let color = '#6b46c1';
+        let icon = '🟣 Direct MTA:';
+        
+        if (isIpPool) {
+            hash = `#ippool=${encodeURIComponent(n.name)}`;
+            color = '#38a169';
+            icon = '🟢 IP Pool:';
+        } else if (isSendPool) {
+            hash = `#sendpool=${encodeURIComponent(n.name)}`;
+            color = '#2b6cb0';
+            icon = '🔵 Send Pool:';
+        }
+        
+        return `<li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">${icon}</span>
+                <a href="${hash}" onclick="event.stopPropagation()" class="table-link" style="color: ${color}; font-size: 1.05rem;">${n.name}</a> 
+            </div>
+            <span style="font-weight: bold; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">${n.portion}%</span>
+        </li>`;
+    };
 
     const renderRoute = (route) => {
         let html = '';
-        if (route.rules.length > 0) {
-            html += route.rules.map(n => {
-                const isIp = isIpPool(n.name);
-                const hash = isIp ? `#ippool=${encodeURIComponent(n.name)}` : `#sendpool=${encodeURIComponent(n.name)}`;
-                const color = isIp ? '#38a169' : '#2b6cb0'; 
-                const icon = isIp ? '🟢 IP Pool:' : '🔵 Send Pool:';
-                return `<li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
-                    <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">${icon}</span>
-                    <a href="${hash}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: ${color}; font-size: 1.05rem;">${n.name}</a> 
-                    <span style="float: right; font-weight: bold; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">${n.portion}%</span>
-                </li>`;
-            }).join('');
-        }
-        if (route.mtas.length > 0) {
-            html += route.mtas.map(n => `
-                <li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
-                    <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">🟣 Direct MTA:</span>
-                    <a href="#mta=${encodeURIComponent(n.name)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: #6b46c1; font-size: 1.05rem;">${n.name}</a> 
-                    <span style="float: right; font-weight: bold; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">${n.portion}%</span>
-                </li>`).join('');
-        }
+        if (route.rules.length > 0) html += route.rules.map(n => resolveNode(n)).join('');
+        if (route.mtas.length > 0) html += route.mtas.map(n => resolveNode(n)).join('');
         return html ? `<ul style="list-style: none; padding: 0; margin: 0;">${html}</ul>` : '<div style="padding: 10px; background: #fff; text-align: center; border-radius: 6px; border: 1px dashed #cbd5e0; color: #a0aec0; font-style: italic;">Drop / Blackhole</div>';
     };
 
     let overridesHtml = rule.domain_overrides.map(o => `
         <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #cbd5e0;">
-            <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+            <div style="margin-bottom: 10px; display: flex; align-items: flex-start; gap: 8px; flex-direction: column;">
                 <h4 style="font-size: 0.85rem; font-weight: 800; color: #4a5568; margin: 0; text-transform: uppercase;">IF Domain Matches:</h4>
-                <span class="badge badge-gray" style="font-size: 0.9rem; font-weight: bold; color: #2d3748 !important;">${o.domain}</span>
+                <div style="font-size: 0.9rem; font-weight: bold; color: #2d3748; background: #e2e8f0; padding: 6px 12px; border-radius: 6px; word-wrap: break-word; white-space: normal; max-width: 100%; border: 1px solid #cbd5e0;">${o.domain}</div>
             </div>
             ${renderRoute(o.route)}
         </div>
@@ -699,9 +719,9 @@ import Layout from '../layouts/Layout.astro';
       const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
       return `
         <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.1s; ${isCritical ? 'background: #fff5f5;' : ''}" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='${isCritical ? '#fff5f5' : 'transparent'}'">
-          <td style="padding: 12px; font-weight: bold; color: #2d3748;"><a href="#mta=${encodeURIComponent(row.name)}" onclick="(document.getElementById('ipPoolModal') as any).close()" class="table-link">${row.name}</a></td>
+          <td style="padding: 12px; font-weight: bold; color: #2d3748;"><a href="#mta=${encodeURIComponent(row.name)}" class="table-link">${row.name}</a></td>
           <td style="padding: 12px; font-family: monospace; font-size: 0.95rem;">${row.ip}</td>
-          <td class="center" style="padding: 12px;"><a href="#throttle=${encodeURIComponent(row.throttling_template)}" onclick="(document.getElementById('ipPoolModal') as any).close()" class="badge badge-gray link-badge">${row.throttling_template}</a></td>
+          <td class="center" style="padding: 12px;"><a href="#throttle=${encodeURIComponent(row.throttling_template)}" class="badge badge-gray link-badge">${row.throttling_template}</a></td>
           <td class="center" style="padding: 12px;">${formatSNDS(row.snds_filter)}</td>
           <td class="center" style="padding: 12px; ${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
           <td class="center" style="padding: 12px; ${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
@@ -771,6 +791,7 @@ import Layout from '../layouts/Layout.astro';
     updatePoolLabel(); (window as any).setView('ips'); applyFiltersAndRender(); 
   };
 
+  // ВОССТАНОВЛЕННАЯ ЛОГИКА РУЧНОГО ОБНОВЛЕНИЯ
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
