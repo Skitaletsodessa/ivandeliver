@@ -32,7 +32,8 @@ import Layout from '../layouts/Layout.astro';
 
     <div class="view-tabs">
       <button class="tab-btn active" id="btnViewIps" onclick="window.setView('ips')">IP Addresses</button>
-      <button class="tab-btn" id="btnViewPools" onclick="window.setView('pools')">Send Pools</button>
+      <button class="tab-btn" id="btnViewSendPools" onclick="window.setView('send-pools')">Send Pools</button>
+      <button class="tab-btn" id="btnViewIpPools" onclick="window.setView('ip-pools')">IP Pools</button>
       <button class="tab-btn" id="btnViewThrottles" onclick="window.setView('throttles')">Throttles</button>
     </div>
 
@@ -46,7 +47,6 @@ import Layout from '../layouts/Layout.astro';
               <span id="poolSelectLabel" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: #2d3748;">🌐 All Pools</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
-            
             <div id="poolDropdownBody" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; background: #fff; border: 2px solid #cbd5e0; border-radius: 8px; margin-top: 4px; z-index: 100; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15); overflow: hidden;">
               <div style="padding: 12px; border-bottom: 1px solid #edf2f7; background: #f8fafc;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -55,8 +55,7 @@ import Layout from '../layouts/Layout.astro';
                 </div>
                 <input type="text" id="poolDropdownSearch" placeholder="Find pool..." class="input-field" style="width: 100%; padding: 8px 12px; box-sizing: border-box; font-size: 0.85rem;" oninput="window.filterPoolsList()" />
               </div>
-              <div id="poolOptionsList" style="max-height: 300px; overflow-y: auto; padding: 4px 0;">
-                </div>
+              <div id="poolOptionsList" style="max-height: 300px; overflow-y: auto; padding: 4px 0;"></div>
             </div>
           </div>
         </div>
@@ -83,27 +82,53 @@ import Layout from '../layouts/Layout.astro';
                 <th class="center sortable" onclick="window.sortBy('google_rep')">Google Rep</th>
               </tr>
             </thead>
-            <tbody id="tableBody">
-              <tr><td colspan="9" class="center" style="padding: 40px; color: #a0aec0;">Loading data...</td></tr>
-            </tbody>
+            <tbody id="tableBody"><tr><td colspan="9" class="center">Loading data...</td></tr></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <div id="poolsView" style="display: none;">
+    <div id="sendPoolsView" style="display: none;">
+      <div style="display: flex; gap: 10px; margin-bottom: 1rem;">
+        <button class="btn-micro sp-filter active" id="spf-ALL" onclick="window.setSpFilter('ALL')">All Send Pools</button>
+        <button class="btn-micro sp-filter" id="spf-SHARED" onclick="window.setSpFilter('SHARED')">Shared Pools</button>
+        <button class="btn-micro sp-filter" id="spf-DEDICATED" onclick="window.setSpFilter('DEDICATED')">Dedicated Pools</button>
+        <button class="btn-micro sp-filter" id="spf-STRATEGIC" onclick="window.setSpFilter('STRATEGIC')">Strategic Pools</button>
+      </div>
       <div class="card table-outer-container">
         <div class="table-scroll">
           <table>
             <thead>
               <tr>
-                <th>Pool Name</th>
+                <th>Send Pool (Routing Rule)</th>
+                <th>Routing Logic</th>
+                <th>Nested IP Pools</th>
+                <th>Direct MTAs</th>
+                <th class="center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="sendPoolsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="ipPoolsView" style="display: none;">
+      <div class="table-actions-bar">
+         <input type="text" id="ipPoolsSearchInput" placeholder="Search Pool Name or IP..." class="input-field search-input" oninput="window.renderIpPoolsView()" />
+      </div>
+      <div class="card table-outer-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>IP Pool Name</th>
                 <th class="center">IP Count</th>
                 <th>Assigned IPs (MTAs)</th>
                 <th class="center">Action</th>
               </tr>
             </thead>
-            <tbody id="poolsTableBody"></tbody>
+            <tbody id="ipPoolsTableBody"></tbody>
           </table>
         </div>
       </div>
@@ -121,33 +146,29 @@ import Layout from '../layouts/Layout.astro';
       <div class="modal-content">
         <div class="modal-header">
           <h2 id="modalTitle">MTA Details</h2>
-          <button onclick="document.getElementById('detailsModal').close()" class="close-btn">&times;</button>
+          <button onclick="window.closeModal('detailsModal')" class="close-btn">&times;</button>
         </div>
         <div class="modal-body" id="modalBodyContent"></div>
-        <div class="modal-footer" style="background: #f8fafc; padding: 1.5rem; border-top: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h4 style="margin: 0; color: #1e293b; font-size: 1.05rem;">Live Statistics API</h4>
-                    <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">Fetch real-time delivery metrics from GreenArrow for this MTA.</p>
-                </div>
-                <button class="btn-primary" disabled style="opacity: 0.6; cursor: not-allowed;" title="API Integration Coming Soon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-                    Load Stats
-                </button>
-            </div>
-            <div id="statsContainer" style="display: none; margin-top: 15px; padding: 15px; background: #fff; border: 1px dashed #cbd5e0; border-radius: 8px;"></div>
-        </div>
       </div>
     </dialog>
 
-    <dialog id="poolModal" class="modal" style="max-width: 1000px;">
+    <dialog id="sendPoolModal" class="modal" style="max-width: 700px;">
       <div class="modal-content">
         <div class="modal-header">
-          <h2 id="poolModalTitle">Pool Details</h2>
-          <button onclick="document.getElementById('poolModal').close()" class="close-btn">&times;</button>
+          <h2 id="sendPoolModalTitle">Send Pool Details</h2>
+          <button onclick="window.closeModal('sendPoolModal')" class="close-btn">&times;</button>
         </div>
-        <div class="modal-body" id="poolModalBodyContent" style="max-height: 65vh; overflow-y: auto; padding: 1.5rem;">
+        <div class="modal-body" id="sendPoolModalBodyContent" style="padding: 1.5rem;"></div>
+      </div>
+    </dialog>
+
+    <dialog id="ipPoolModal" class="modal" style="max-width: 1000px;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="ipPoolModalTitle">IP Pool Details</h2>
+          <button onclick="window.closeModal('ipPoolModal')" class="close-btn">&times;</button>
         </div>
+        <div class="modal-body" id="ipPoolModalBodyContent" style="max-height: 65vh; overflow-y: auto; padding: 1.5rem;"></div>
       </div>
     </dialog>
 
@@ -160,20 +181,14 @@ import Layout from '../layouts/Layout.astro';
   const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   
   let enrichedData = [];
+  let enrichedRules = []; // Хранит Routing Rules
   let currentFilteredData = [];
   let sortCol = 'ip';
   let sortAsc = true;
-  
   let activePools = [];
+  let spActiveFilter = 'ALL';
   
-  // Умный объект для хранения активных фильтров карточек
-  let activeFilters = {
-    free: false,
-    gpt: new Set(),
-    snds: new Set()
-  };
-
-  // Переключатель логики: AND или OR
+  let activeFilters = { free: false, gpt: new Set(), snds: new Set() };
   let filterLogicMatch = 'AND'; 
 
   async function init() {
@@ -184,7 +199,10 @@ import Layout from '../layouts/Layout.astro';
         fetch(POSTMASTER_URL, { cache: 'no-store' })
       ]);
 
-      const inventory = await invRes.json();
+      const inventoryPayload = await invRes.json();
+      const rawIps = Array.isArray(inventoryPayload) ? inventoryPayload : (inventoryPayload.ips || []);
+      const rawRules = Array.isArray(inventoryPayload) ? [] : (inventoryPayload.rules || []);
+
       const sndsData = await sndsRes.json();
       const pmData = await pmRes.json();
 
@@ -205,7 +223,7 @@ import Layout from '../layouts/Layout.astro';
       });
 
       const allPools = new Set();
-      enrichedData = inventory.map(item => {
+      enrichedData = rawIps.map(item => {
         let poolsArr = [];
         try { poolsArr = JSON.parse(item.pools || '[]'); } catch(e) {}
         poolsArr = poolsArr.filter(p => p && p !== 'null');
@@ -227,8 +245,27 @@ import Layout from '../layouts/Layout.astro';
         };
       });
 
+      // Парсинг Routing Rules
+      enrichedRules = rawRules.map(r => {
+          let raw = {};
+          try { raw = JSON.parse(r.raw_json || '{}'); } catch(e) {}
+          let dt = raw.default?.deliver_through || [];
+          return {
+              id: r.id,
+              name: r.name,
+              randomization_type: r.randomization_type || 'random',
+              nested_rules: dt.filter(x => x.routing_rule).map(x => x.routing_rule.name),
+              nested_mtas: dt.filter(x => x.virtual_mta).map(x => x.virtual_mta.name)
+          };
+      });
+
       populatePoolDropdowns(Array.from(allPools).sort());
       applyFiltersAndRender();
+      (window as any).renderSendPoolsView();
+
+      // Слушатель изменения Hash URL (Нативная маршрутизация)
+      window.addEventListener('hashchange', (window as any).handleHashRouter);
+      (window as any).handleHashRouter(); // Проверяем хеш при загрузке
 
       document.addEventListener('click', (e) => {
         const container = document.getElementById('poolFilterContainer');
@@ -242,174 +279,117 @@ import Layout from '../layouts/Layout.astro';
 
     } catch (err) {
       console.error("Data Merge Error:", err);
-      document.getElementById('tableBody').innerHTML = `<tr><td colspan="9" class="center error-text">Error loading data. Check worker connectivity.</td></tr>`;
+      document.getElementById('tableBody').innerHTML = `<tr><td colspan="9" class="center error-text">Error loading data. Did you update the d1-template worker?</td></tr>`;
     }
   }
 
-  // --- ЛОГИКА ФИЛЬТРАЦИИ ПО КАРТОЧКАМ ---
+  // --- HASH ROUTER (Позволяет открывать ссылки в новых вкладках) ---
+  (window as any).handleHashRouter = () => {
+      const hash = window.location.hash.substring(1);
+      if (!hash) return;
+      
+      const params = new URLSearchParams(hash);
+      if (params.has('mta')) {
+          (window as any).setView('ips');
+          (window as any).openDetailsModal(params.get('mta'));
+      } else if (params.has('ippool')) {
+          (window as any).setView('ip-pools');
+          (window as any).openIpPoolModal(params.get('ippool'));
+      } else if (params.has('sendpool')) {
+          (window as any).setView('send-pools');
+          (window as any).openSendPoolModal(params.get('sendpool'));
+      } else if (params.has('throttle')) {
+          (window as any).setView('throttles');
+          // Тут в будущем будет открываться модалка троттла
+      }
+  };
+
+  (window as any).closeModal = (id) => {
+      document.getElementById(id).close();
+      history.replaceState(null, null, ' '); // Очищаем URL хеш без прыжка страницы
+  };
+
+  // --- ЛОГИКА ФИЛЬТРАЦИИ И РЕНДЕРИНГА ---
   (window as any).toggleStatFilter = (category, value) => {
     if (category === 'clear') {
-        activeFilters.free = false;
-        activeFilters.gpt.clear();
-        activeFilters.snds.clear();
-        (window as any).setView('ips');
-    } else if (category === 'free') {
-        activeFilters.free = !activeFilters.free;
-        (window as any).setView('ips');
-    } else if (category === 'gpt') {
-        activeFilters.gpt.has(value) ? activeFilters.gpt.delete(value) : activeFilters.gpt.add(value);
-        (window as any).setView('ips');
-    } else if (category === 'snds') {
-        activeFilters.snds.has(value) ? activeFilters.snds.delete(value) : activeFilters.snds.add(value);
-        (window as any).setView('ips');
-    }
+        activeFilters.free = false; activeFilters.gpt.clear(); activeFilters.snds.clear();
+    } else if (category === 'free') { activeFilters.free = !activeFilters.free;
+    } else if (category === 'gpt') { activeFilters.gpt.has(value) ? activeFilters.gpt.delete(value) : activeFilters.gpt.add(value);
+    } else if (category === 'snds') { activeFilters.snds.has(value) ? activeFilters.snds.delete(value) : activeFilters.snds.add(value); }
+    (window as any).setView('ips');
     applyFiltersAndRender();
   };
 
-  (window as any).setFilterLogic = (logic) => {
-    filterLogicMatch = logic;
-    applyFiltersAndRender();
-  };
+  (window as any).setFilterLogic = (logic) => { filterLogicMatch = logic; applyFiltersAndRender(); };
 
-  // --- ЛОГИКА MULTI-SELECT ДРОПДАУНА ---
   function populatePoolDropdowns(pools) {
     const list = document.getElementById('poolOptionsList');
     if (!list) return;
     list.innerHTML = pools.map(pool => `
-        <label class="pool-option-label" style="display: flex; align-items: center; padding: 8px 15px; cursor: pointer; transition: background 0.1s;">
-            <input type="checkbox" class="pool-checkbox" value="${pool}" onchange="window.togglePoolSelection(this)" style="margin-right: 12px; cursor: pointer; width: 16px; height: 16px;" ${activePools.includes(pool) ? 'checked' : ''} />
-            <span style="font-size: 0.9rem; color: #2d3748; word-break: break-all;">${pool}</span>
+        <label class="pool-option-label" style="display: flex; align-items: center; padding: 8px 15px; cursor: pointer;">
+            <input type="checkbox" class="pool-checkbox" value="${pool}" onchange="window.togglePoolSelection(this)" style="margin-right: 12px; cursor: pointer;" ${activePools.includes(pool) ? 'checked' : ''} />
+            <span style="font-size: 0.9rem; color: #2d3748;">${pool}</span>
         </label>
     `).join('');
   }
 
-  (window as any).togglePoolDropdown = (e) => {
-    const body = document.getElementById('poolDropdownBody');
-    body.style.display = body.style.display === 'none' ? 'block' : 'none';
-  };
-
+  (window as any).togglePoolDropdown = () => { const b = document.getElementById('poolDropdownBody'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; };
   (window as any).filterPoolsList = () => {
     const term = (document.getElementById('poolDropdownSearch') as HTMLInputElement).value.toLowerCase();
-    const labels = document.querySelectorAll('.pool-option-label');
-    labels.forEach(label => {
-      const text = label.textContent.toLowerCase();
-      (label as HTMLElement).style.display = text.includes(term) ? 'flex' : 'none';
+    document.querySelectorAll('.pool-option-label').forEach(label => {
+      (label as HTMLElement).style.display = label.textContent.toLowerCase().includes(term) ? 'flex' : 'none';
     });
   };
-
   (window as any).togglePoolSelection = (cb) => {
     const val = cb.value;
-    if (cb.checked) {
-      if (!activePools.includes(val)) activePools.push(val);
-    } else {
-      activePools = activePools.filter(p => p !== val);
-    }
-    updatePoolLabel();
-    applyFiltersAndRender();
+    if (cb.checked) { if (!activePools.includes(val)) activePools.push(val); } else { activePools = activePools.filter(p => p !== val); }
+    updatePoolLabel(); applyFiltersAndRender();
   };
-
-  (window as any).clearPoolSelection = () => {
-    activePools = [];
-    document.querySelectorAll('.pool-checkbox').forEach(cb => (cb as HTMLInputElement).checked = false);
-    updatePoolLabel();
-    applyFiltersAndRender();
-  };
+  (window as any).clearPoolSelection = () => { activePools = []; document.querySelectorAll('.pool-checkbox').forEach(cb => (cb as HTMLInputElement).checked = false); updatePoolLabel(); applyFiltersAndRender(); };
 
   function updatePoolLabel() {
     const label = document.getElementById('poolSelectLabel');
-    if (activePools.length === 0) {
-      label.innerHTML = '🌐 All Pools';
-      label.style.color = '#2d3748';
-    } else if (activePools.length === 1) {
-      label.innerHTML = `🌐 ${activePools[0]}`;
-      label.style.color = '#3182ce';
-    } else {
-      label.innerHTML = `🌐 ${activePools.length} Pools Selected`;
-      label.style.color = '#3182ce';
-    }
+    if (activePools.length === 0) { label.innerHTML = '🌐 All Pools'; label.style.color = '#2d3748'; } 
+    else if (activePools.length === 1) { label.innerHTML = `🌐 ${activePools[0]}`; label.style.color = '#3182ce'; } 
+    else { label.innerHTML = `🌐 ${activePools.length} Pools Selected`; label.style.color = '#3182ce'; }
   }
 
-  // --- ЛОГИКА ФИЛЬТРАЦИИ И РЕНДЕРИНГА ---
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
-    
-    // 1. Базовая фильтрация (Текст + Выбор пула из списка)
     let baseFiltered = enrichedData.filter(d => {
-      const safeName = (d.name || '').toLowerCase();
-      const safeIp = (d.ip || '').toLowerCase();
-      const safeHost = (d.hostname || '').toLowerCase();
-
-      const matchSearch = safeName.includes(searchTerm) || safeIp.includes(searchTerm) || safeHost.includes(searchTerm);
+      const matchSearch = (d.name||'').toLowerCase().includes(searchTerm) || (d.ip||'').toLowerCase().includes(searchTerm) || (d.hostname||'').toLowerCase().includes(searchTerm);
       const matchPool = activePools.length === 0 ? true : activePools.some(selectedPool => d.pools.includes(selectedPool));
-      
       return matchSearch && matchPool;
     });
 
     renderSummary(baseFiltered);
 
-    // 2. Умная фильтрация по карточкам с логикой AND / OR
     let tableFiltered = baseFiltered.filter(d => {
-        // Если ни один фильтр не активен, показываем всё
         if (!activeFilters.free && activeFilters.gpt.size === 0 && activeFilters.snds.size === 0) return true;
-
         let matches = [];
-
         if (activeFilters.free) matches.push(d.pools.length === 0);
         if (activeFilters.gpt.size > 0) matches.push(activeFilters.gpt.has(d.google_rep));
         if (activeFilters.snds.size > 0) matches.push(activeFilters.snds.has(d.snds_filter));
-
-        if (filterLogicMatch === 'AND') {
-            // При AND: IP должен пройти проверку ВСЕХ активных категорий
-            return matches.every(m => m === true);
-        } else {
-            // При OR: IP должен пройти проверку ХОТЯ БЫ ОДНОЙ активной категории
-            return matches.some(m => m === true);
-        }
+        return filterLogicMatch === 'AND' ? matches.every(m => m) : matches.some(m => m);
     });
 
     tableFiltered.sort((a, b) => {
-      let valA = a[sortCol]; let valB = b[sortCol];
-      if (sortCol === 'ip') {
-        const numA = ipToNumber(a.ip); const numB = ipToNumber(b.ip);
-        if (numA !== numB) return sortAsc ? numA - numB : numB - numA;
-        return a.name.localeCompare(b.name);
-      }
-      let strA = String(valA || '').toLowerCase(); let strB = String(valB || '').toLowerCase();
+      if (sortCol === 'ip') return sortAsc ? ipToNumber(a.ip) - ipToNumber(b.ip) : ipToNumber(b.ip) - ipToNumber(a.ip);
+      let strA = String(a[sortCol] || '').toLowerCase(); let strB = String(b[sortCol] || '').toLowerCase();
       return sortAsc ? strA.localeCompare(strB) : strB.localeCompare(strA);
     });
 
     currentFilteredData = tableFiltered;
     renderTable(tableFiltered);
-    renderPoolsView(baseFiltered);
+    (window as any).renderIpPoolsView();
   }
 
-  function ipToNumber(ip) {
-    if (!ip) return 0;
-    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-  }
+  function ipToNumber(ip) { if (!ip) return 0; return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0; }
 
   function renderSummary(data) {
     const container = document.getElementById('inventory-summary');
     if (!container) return;
-    
-    const uniqueIps = new Set(data.map(d => d.ip)).size;
-    const freeIpsCount = new Set(data.filter(d => d.pools.length === 0).map(d => d.ip)).size;
-    
-    const uniquePools = new Set();
-    data.forEach(d => d.pools.forEach(p => uniquePools.add(p)));
-    
-    const uniqueThrottles = new Set(data.map(d => d.throttling_template).filter(t => t && t !== '—')).size;
-
     const getCount = (field, val) => new Set(data.filter(d => d[field] === val).map(d => d.ip)).size;
-    const gptHigh = getCount('google_rep', 'HIGH');
-    const gptMed = getCount('google_rep', 'MEDIUM');
-    const gptLow = getCount('google_rep', 'LOW');
-    const gptBad = getCount('google_rep', 'BAD');
-    
-    const sndsGreen = getCount('snds_filter', 'GREEN');
-    const sndsYellow = getCount('snds_filter', 'YELLOW');
-    const sndsRed = getCount('snds_filter', 'RED');
-
     const chk = (cat, val) => {
         if (cat === 'clear' && !activeFilters.free && activeFilters.gpt.size === 0 && activeFilters.snds.size === 0) return 'active-filter';
         if (cat === 'free' && activeFilters.free) return 'active-filter';
@@ -420,24 +400,19 @@ import Layout from '../layouts/Layout.astro';
 
     container.innerHTML = `
       <div class="summary-row-1">
-          <div class="stat-card info ${chk('clear')}" onclick="window.toggleStatFilter('clear')" title="Clear all reputation filters">
-              <span class="stat-label">Total Physical IPs</span>
-              <span class="stat-value">${uniqueIps}</span>
+          <div class="stat-card info ${chk('clear')}" onclick="window.toggleStatFilter('clear')">
+              <span class="stat-label">Total Physical IPs</span><span class="stat-value">${new Set(data.map(d => d.ip)).size}</span>
           </div>
           <div class="stat-card warning ${chk('free')}" onclick="window.toggleStatFilter('free')">
-              <span class="stat-label">Free IPs (No Pools)</span>
-              <span class="stat-value">${freeIpsCount}</span>
+              <span class="stat-label">Free IPs (No Pools)</span><span class="stat-value">${new Set(data.filter(d => d.pools.length === 0).map(d => d.ip)).size}</span>
           </div>
-          <div class="stat-card info" onclick="window.setView('pools')" style="background: #f8fafc !important;">
-              <span class="stat-label">Total Pools</span>
-              <span class="stat-value">${uniquePools.size} <span style="font-size:1rem; color:#a0aec0;">↗</span></span>
+          <div class="stat-card info" onclick="window.setView('ip-pools')" style="background: #f8fafc !important;">
+              <span class="stat-label">Total IP Pools</span><span class="stat-value">${new Set(data.flatMap(d => d.pools)).size} <span style="font-size:1rem; color:#a0aec0;">↗</span></span>
           </div>
           <div class="stat-card info" onclick="window.setView('throttles')" style="background: #f8fafc !important;">
-              <span class="stat-label">Total Throttles</span>
-              <span class="stat-value">${uniqueThrottles} <span style="font-size:1rem; color:#a0aec0;">↗</span></span>
+              <span class="stat-label">Total Throttles</span><span class="stat-value">${new Set(data.map(d => d.throttling_template).filter(t => t && t !== '—')).size} <span style="font-size:1rem; color:#a0aec0;">↗</span></span>
           </div>
       </div>
-
       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.75rem; margin-top: 1.5rem;">
           <span style="font-size: 0.85rem; font-weight: 800; color: #4a5568; text-transform: uppercase;">Reputation Filters</span>
           <div style="display: flex; align-items: center; gap: 4px; background: #e2e8f0; padding: 4px; border-radius: 8px;">
@@ -446,30 +421,14 @@ import Layout from '../layouts/Layout.astro';
               <button class="toggle-btn ${filterLogicMatch === 'OR' ? 'active' : ''}" onclick="window.setFilterLogic('OR')">OR</button>
           </div>
       </div>
-
       <div class="summary-row-2">
-          <div class="stat-card small-card ${chk('gpt', 'HIGH')}" onclick="window.toggleStatFilter('gpt', 'HIGH')" style="border-left: 4px solid #48bb78 !important;">
-              <span class="stat-label">GPT High</span><span class="stat-value">${gptHigh}</span>
-          </div>
-          <div class="stat-card small-card ${chk('gpt', 'MEDIUM')}" onclick="window.toggleStatFilter('gpt', 'MEDIUM')" style="border-left: 4px solid #ecc94b !important;">
-              <span class="stat-label">GPT Medium</span><span class="stat-value">${gptMed}</span>
-          </div>
-          <div class="stat-card small-card ${chk('gpt', 'LOW')}" onclick="window.toggleStatFilter('gpt', 'LOW')" style="border-left: 4px solid #ed8936 !important;">
-              <span class="stat-label">GPT Low</span><span class="stat-value">${gptLow}</span>
-          </div>
-          <div class="stat-card small-card ${chk('gpt', 'BAD')}" onclick="window.toggleStatFilter('gpt', 'BAD')" style="border-left: 4px solid #e53e3e !important;">
-              <span class="stat-label">GPT Bad</span><span class="stat-value">${gptBad}</span>
-          </div>
-          
-          <div class="stat-card small-card ${chk('snds', 'GREEN')}" onclick="window.toggleStatFilter('snds', 'GREEN')" style="border-left: 4px solid #48bb78 !important;">
-              <span class="stat-label">SNDS Green</span><span class="stat-value">${sndsGreen}</span>
-          </div>
-          <div class="stat-card small-card ${chk('snds', 'YELLOW')}" onclick="window.toggleStatFilter('snds', 'YELLOW')" style="border-left: 4px solid #ecc94b !important;">
-              <span class="stat-label">SNDS Yellow</span><span class="stat-value">${sndsYellow}</span>
-          </div>
-          <div class="stat-card small-card ${chk('snds', 'RED')}" onclick="window.toggleStatFilter('snds', 'RED')" style="border-left: 4px solid #e53e3e !important;">
-              <span class="stat-label">SNDS Red</span><span class="stat-value">${sndsRed}</span>
-          </div>
+          <div class="stat-card small-card ${chk('gpt', 'HIGH')}" onclick="window.toggleStatFilter('gpt', 'HIGH')" style="border-left: 4px solid #48bb78 !important;"><span class="stat-label">GPT High</span><span class="stat-value">${getCount('google_rep', 'HIGH')}</span></div>
+          <div class="stat-card small-card ${chk('gpt', 'MEDIUM')}" onclick="window.toggleStatFilter('gpt', 'MEDIUM')" style="border-left: 4px solid #ecc94b !important;"><span class="stat-label">GPT Medium</span><span class="stat-value">${getCount('google_rep', 'MEDIUM')}</span></div>
+          <div class="stat-card small-card ${chk('gpt', 'LOW')}" onclick="window.toggleStatFilter('gpt', 'LOW')" style="border-left: 4px solid #ed8936 !important;"><span class="stat-label">GPT Low</span><span class="stat-value">${getCount('google_rep', 'LOW')}</span></div>
+          <div class="stat-card small-card ${chk('gpt', 'BAD')}" onclick="window.toggleStatFilter('gpt', 'BAD')" style="border-left: 4px solid #e53e3e !important;"><span class="stat-label">GPT Bad</span><span class="stat-value">${getCount('google_rep', 'BAD')}</span></div>
+          <div class="stat-card small-card ${chk('snds', 'GREEN')}" onclick="window.toggleStatFilter('snds', 'GREEN')" style="border-left: 4px solid #48bb78 !important;"><span class="stat-label">SNDS Green</span><span class="stat-value">${getCount('snds_filter', 'GREEN')}</span></div>
+          <div class="stat-card small-card ${chk('snds', 'YELLOW')}" onclick="window.toggleStatFilter('snds', 'YELLOW')" style="border-left: 4px solid #ecc94b !important;"><span class="stat-label">SNDS Yellow</span><span class="stat-value">${getCount('snds_filter', 'YELLOW')}</span></div>
+          <div class="stat-card small-card ${chk('snds', 'RED')}" onclick="window.toggleStatFilter('snds', 'RED')" style="border-left: 4px solid #e53e3e !important;"><span class="stat-label">SNDS Red</span><span class="stat-value">${getCount('snds_filter', 'RED')}</span></div>
       </div>
     `;
   }
@@ -477,77 +436,100 @@ import Layout from '../layouts/Layout.astro';
   function renderTable(data) {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
-    if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 40px; font-weight: bold; color: #a0aec0;">No IPs match current filters.</td></tr>`;
-      return;
-    }
+    if (data.length === 0) { tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 40px; font-weight: bold; color: #a0aec0;">No IPs match current filters.</td></tr>`; return; }
 
     const grouped = {};
-    data.forEach(row => {
-      if (!grouped[row.ip]) grouped[row.ip] = [];
-      grouped[row.ip].push(row);
-    });
-
+    data.forEach(row => { if (!grouped[row.ip]) grouped[row.ip] = []; grouped[row.ip].push(row); });
+    
     let html = '';
-    const orderedIps = [...new Set(data.map(d => d.ip))];
-
-    orderedIps.forEach(ip => {
+    [...new Set(data.map(d => d.ip))].forEach(ip => {
       const rows = grouped[ip];
-      const rowSpan = rows.length;
-      const firstRow = rows[0];
-      const isCritical = firstRow.snds_filter === 'RED' || firstRow.google_rep === 'BAD' || firstRow.traps > 0;
+      const isCritical = rows[0].snds_filter === 'RED' || rows[0].google_rep === 'BAD' || rows[0].traps > 0;
       const bgClass = isCritical ? 'row-alert' : '';
 
-      html += `<tr class="domain-row ${bgClass}" style="border-top: 2px solid #cbd5e0;" onclick="window.openDetailsModal('${firstRow.name}')">`;
-      html += `<td rowspan="${rowSpan}" style="font-family: monospace; font-size: 1.05rem; font-weight: bold; background: ${isCritical ? '#fff5f5' : '#f8fafc'}; border-right: 1px solid #e2e8f0; vertical-align: top; padding-top: 15px;">${ip}</td>`;
-      
-      html += renderMtaColumns(firstRow);
-
-      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px; border-left: 1px solid #e2e8f0;">${formatSNDS(firstRow.snds_filter)}</td>`;
-      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px; ${firstRow.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${firstRow.complaints}%</td>`;
-      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px; ${firstRow.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${firstRow.traps > 0 ? '🚨 ' + firstRow.traps : '0'}</td>`;
-      html += `<td class="center" rowspan="${rowSpan}" style="vertical-align: top; padding-top: 15px;">${formatGoogleRep(firstRow.google_rep)}</td>`;
+      html += `<tr class="domain-row ${bgClass}" style="border-top: 2px solid #cbd5e0;" onclick="window.location.hash='mta=${encodeURIComponent(rows[0].name)}'">`;
+      html += `<td rowspan="${rows.length}" style="font-family: monospace; font-size: 1.05rem; font-weight: bold; background: ${isCritical ? '#fff5f5' : '#f8fafc'}; border-right: 1px solid #e2e8f0; vertical-align: top; padding-top: 15px;">${ip}</td>`;
+      html += renderMtaColumns(rows[0]);
+      html += `<td class="center" rowspan="${rows.length}" style="vertical-align: top; padding-top: 15px; border-left: 1px solid #e2e8f0;">${formatSNDS(rows[0].snds_filter)}</td>`;
+      html += `<td class="center" rowspan="${rows.length}" style="vertical-align: top; padding-top: 15px; ${rows[0].complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${rows[0].complaints}%</td>`;
+      html += `<td class="center" rowspan="${rows.length}" style="vertical-align: top; padding-top: 15px; ${rows[0].traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${rows[0].traps > 0 ? '🚨 ' + rows[0].traps : '0'}</td>`;
+      html += `<td class="center" rowspan="${rows.length}" style="vertical-align: top; padding-top: 15px;">${formatGoogleRep(rows[0].google_rep)}</td>`;
       html += `</tr>`;
 
-      for (let i = 1; i < rowSpan; i++) {
-        html += `<tr class="domain-row ${bgClass}" onclick="window.openDetailsModal('${rows[i].name}')">`;
+      for (let i = 1; i < rows.length; i++) {
+        html += `<tr class="domain-row ${bgClass}" onclick="window.location.hash='mta=${encodeURIComponent(rows[i].name)}'">`;
         html += renderMtaColumns(rows[i]);
         html += `</tr>`;
       }
     });
-
     tbody.innerHTML = html;
   }
 
   function renderMtaColumns(row) {
-    const poolBadges = row.pools.length > 0 
-      ? row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
-      : `<span class="text-gray" style="font-style:italic;">No pools</span>`;
-    
+    const poolBadges = row.pools.length > 0 ? row.pools.map(p => `<a href="#ippool=${encodeURIComponent(p)}" onclick="event.stopPropagation()" class="pool-tag">${p}</a>`).join(' ') : `<span class="text-gray" style="font-style:italic;">No pools</span>`;
     return `
-      <td class="domain-text"><strong>${row.name}</strong></td>
+      <td class="domain-text"><a href="#mta=${encodeURIComponent(row.name)}" onclick="event.stopPropagation()" class="table-link">${row.name}</a></td>
       <td style="color: #4a5568;">${row.hostname}</td>
-      <td class="center"><span class="badge badge-gray" style="cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" onclick="event.stopPropagation(); window.jumpToThrottle('${row.throttling_template}')">${row.throttling_template}</span></td>
+      <td class="center"><a href="#throttle=${encodeURIComponent(row.throttling_template)}" onclick="event.stopPropagation()" class="badge badge-gray link-badge">${row.throttling_template}</a></td>
       <td><div class="pools-container">${poolBadges}</div></td>
     `;
   }
 
-  function renderPoolsView(data) {
-    const poolMap = {};
-    data.forEach(d => { 
-      d.pools.forEach(p => { 
-        if(!poolMap[p]) poolMap[p] = []; 
-        poolMap[p].push(d); 
-      }); 
-    });
+  // --- ВКЛАДКА SEND POOLS (Routing Rules) ---
+  (window as any).setSpFilter = (val) => { 
+      spActiveFilter = val; 
+      document.querySelectorAll('.sp-filter').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`spf-${val}`).classList.add('active');
+      (window as any).renderSendPoolsView(); 
+  };
+
+  (window as any).renderSendPoolsView = () => {
+    let filtered = enrichedRules;
+    if (spActiveFilter === 'SHARED') {
+        const shared = ['a-tec35', 'a-tec80', 'a-tec83', 'a-tec87', 'a-tec91'];
+        filtered = enrichedRules.filter(r => shared.includes(r.name));
+    } else if (spActiveFilter === 'DEDICATED') {
+        filtered = enrichedRules.filter(r => r.name.toLowerCase().includes('dedicated'));
+    } else if (spActiveFilter === 'STRATEGIC') {
+        filtered = enrichedRules.filter(r => r.name.toLowerCase().includes('strategic'));
+    }
+
+    const tbody = document.getElementById('sendPoolsTableBody');
+    if (!tbody) return;
     
-    const tbody = document.getElementById('poolsTableBody');
+    tbody.innerHTML = filtered.map(r => {
+        let nestedRulesHTML = r.nested_rules.map(n => `<a href="#ippool=${encodeURIComponent(n)}" onclick="event.stopPropagation()" class="pool-tag" style="background:#e6fffa; border-color:#38a169; color:#22543d;">${n}</a>`).join(' ');
+        let nestedMtasHTML = r.nested_mtas.map(n => `<a href="#mta=${encodeURIComponent(n)}" onclick="event.stopPropagation()" class="pool-tag">${n}</a>`).join(' ');
+        
+        return `
+          <tr class="domain-row" onclick="window.location.hash='sendpool=${encodeURIComponent(r.name)}'">
+            <td><a href="#sendpool=${encodeURIComponent(r.name)}" onclick="event.stopPropagation()" class="table-link" style="font-size: 1.05rem;">${r.name}</a></td>
+            <td><span class="badge badge-gray">${r.randomization_type}</span></td>
+            <td><div class="pools-container">${nestedRulesHTML || '<span class="text-gray">—</span>'}</div></td>
+            <td><div class="pools-container">${nestedMtasHTML || '<span class="text-gray">—</span>'}</div></td>
+            <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="event.stopPropagation(); window.location.hash='sendpool=${encodeURIComponent(r.name)}'">Manage</button></td>
+          </tr>
+        `;
+    }).join('') || `<tr><td colspan="5" class="center">No Send Pools found.</td></tr>`;
+  };
+
+  // --- ВКЛАДКА IP POOLS (Old Send Pools) ---
+  (window as any).renderIpPoolsView = () => {
+    const term = (document.getElementById('ipPoolsSearchInput') as HTMLInputElement)?.value.toLowerCase() || '';
+    
+    const poolMap = {};
+    enrichedData.forEach(d => { d.pools.forEach(p => { if(!poolMap[p]) poolMap[p] = []; poolMap[p].push(d); }); });
+    
+    const tbody = document.getElementById('ipPoolsTableBody');
     if (!tbody) return;
 
-    tbody.innerHTML = Object.keys(poolMap).sort().map(poolName => {
-      const mtas = poolMap[poolName];
-      const ipCount = mtas.length;
+    const filteredPoolKeys = Object.keys(poolMap).sort().filter(poolName => {
+        if (poolName.toLowerCase().includes(term)) return true;
+        return poolMap[poolName].some(m => m.ip.includes(term) || m.name.toLowerCase().includes(term));
+    });
 
+    tbody.innerHTML = filteredPoolKeys.map(poolName => {
+      const mtas = poolMap[poolName];
       let hasBad = false, hasMedium = false, hasHigh = false;
       mtas.forEach(m => {
         if (m.google_rep === 'BAD' || m.google_rep === 'LOW') hasBad = true;
@@ -556,46 +538,34 @@ import Layout from '../layouts/Layout.astro';
       });
 
       let badgeCls = 'badge-gray';
-      if (hasBad) badgeCls = 'badge-red';
-      else if (hasMedium) badgeCls = 'badge-yellow';
-      else if (hasHigh) badgeCls = 'badge-green';
+      if (hasBad) badgeCls = 'badge-red'; else if (hasMedium) badgeCls = 'badge-yellow'; else if (hasHigh) badgeCls = 'badge-green';
 
       const mtaNames = mtas.map(m => m.name);
       let mtaDisplay = mtaNames.slice(0, 5).join(', ');
       if (mtaNames.length > 5) mtaDisplay += ` <span style="color: #a0aec0; font-style: italic;">(+${mtaNames.length - 5} more)</span>`;
 
       return `
-        <tr class="domain-row" onclick="window.openPoolModal('${poolName}')">
-          <td><strong style="color: #2d3748; font-size: 1.05rem;">${poolName}</strong></td>
-          <td class="center"><span class="badge ${badgeCls}" style="font-size: 0.85rem;">${ipCount} IPs</span></td>
+        <tr class="domain-row" onclick="window.location.hash='ippool=${encodeURIComponent(poolName)}'">
+          <td><a href="#ippool=${encodeURIComponent(poolName)}" onclick="event.stopPropagation()" class="table-link" style="font-size: 1.05rem;">${poolName}</a></td>
+          <td class="center"><span class="badge ${badgeCls}" style="font-size: 0.85rem;">${mtas.length} IPs</span></td>
           <td style="font-size: 0.9rem; color: #4a5568;">${mtaDisplay}</td>
-          <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="event.stopPropagation(); window.openPoolModal('${poolName}')">Manage</button></td>
+          <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="event.stopPropagation(); window.location.hash='ippool=${encodeURIComponent(poolName)}'">Manage</button></td>
         </tr>
       `;
-    }).join('') || `<tr><td colspan="4" class="center">No pools found.</td></tr>`;
-  }
+    }).join('') || `<tr><td colspan="4" class="center">No IP pools found matching search.</td></tr>`;
+  };
 
-  function formatSNDS(s) {
-    let cls = 'badge-gray'; if(s === 'GREEN') cls = 'badge-green'; if(s === 'YELLOW') cls = 'badge-yellow'; if(s === 'RED') cls = 'badge-red';
-    return `<span class="badge ${cls}">${s}</span>`;
-  }
+  function formatSNDS(s) { let cls = 'badge-gray'; if(s === 'GREEN') cls = 'badge-green'; if(s === 'YELLOW') cls = 'badge-yellow'; if(s === 'RED') cls = 'badge-red'; return `<span class="badge ${cls}">${s}</span>`; }
+  function formatGoogleRep(r) { let cls = 'badge-gray'; if(r === 'HIGH') cls = 'badge-green'; if(r === 'MEDIUM') cls = 'badge-yellow'; if(r === 'BAD' || r === 'LOW') cls = 'badge-red'; return `<span class="badge ${cls}">${r}</span>`; }
 
-  function formatGoogleRep(r) {
-    let cls = 'badge-gray'; if(r === 'HIGH') cls = 'badge-green'; if(r === 'MEDIUM') cls = 'badge-yellow'; if(r === 'BAD' || r === 'LOW') cls = 'badge-red';
-    return `<span class="badge ${cls}">${r}</span>`;
-  }
-
+  // --- МОДАЛКИ ---
   (window as any).openDetailsModal = (mtaName) => {
     const data = enrichedData.find(d => d.name === mtaName);
     if (!data) return;
-
     document.getElementById('modalTitle').innerText = `MTA: ${data.name}`;
-    
-    const poolBadges = data.pools.length > 0 
-      ? data.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
-      : `<span class="text-gray" style="font-style: italic;">No pools assigned</span>`;
+    const poolBadges = data.pools.length > 0 ? data.pools.map(p => `<a href="#ippool=${encodeURIComponent(p)}" class="pool-tag" onclick="(document.getElementById('detailsModal') as any).close()">${p}</a>`).join(' ') : `<span class="text-gray" style="font-style: italic;">No pools assigned</span>`;
 
-    const bodyHtml = `
+    document.getElementById('modalBodyContent').innerHTML = `
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
           <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
               <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 6px;">IP Address</div>
@@ -606,38 +576,58 @@ import Layout from '../layouts/Layout.astro';
               <div style="font-size: 1rem; color: #0f172a; font-weight: 500;">${data.hostname}</div>
           </div>
       </div>
-      
       <div style="margin-bottom: 20px;">
           <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px;">Throttling Template</div>
-          <div><span class="badge badge-gray" style="font-size: 0.9rem; padding: 6px 12px; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" onclick="document.getElementById('detailsModal').close(); window.jumpToThrottle('${data.throttling_template}')">${data.throttling_template}</span></div>
+          <div><a href="#throttle=${encodeURIComponent(data.throttling_template)}" class="badge badge-gray link-badge" onclick="(document.getElementById('detailsModal') as any).close()">${data.throttling_template}</a></div>
       </div>
-
       <div style="margin-bottom: 20px;">
           <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px;">Assigned Pools</div>
-          <div class="pools-container" style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; min-height: 50px;">
-              ${poolBadges}
-          </div>
+          <div class="pools-container" style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; min-height: 50px;">${poolBadges}</div>
       </div>
     `;
-    
-    document.getElementById('modalBodyContent').innerHTML = bodyHtml;
     (document.getElementById('detailsModal') as HTMLDialogElement).showModal();
   };
 
-  (window as any).openPoolModal = (poolName) => {
+  (window as any).openSendPoolModal = (ruleName) => {
+    const rule = enrichedRules.find(r => r.name === ruleName);
+    if (!rule) return;
+    document.getElementById('sendPoolModalTitle').innerText = `Send Pool: ${rule.name}`;
+    
+    let nestedRulesHTML = rule.nested_rules.map(n => `<li><a href="#ippool=${encodeURIComponent(n)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: #2b6cb0;">${n}</a></li>`).join('');
+    let nestedMtasHTML = rule.nested_mtas.map(n => `<li><a href="#mta=${encodeURIComponent(n)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link">${n}</a></li>`).join('');
+
+    document.getElementById('sendPoolModalBodyContent').innerHTML = `
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1; background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <h3 style="font-size: 0.85rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-top: 0;">Nested IP Pools</h3>
+                <ul style="list-style: none; padding: 0; margin: 0; line-height: 2;">
+                    ${nestedRulesHTML || '<li style="color: #a0aec0; font-style: italic;">None</li>'}
+                </ul>
+            </div>
+            <div style="flex: 1; background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <h3 style="font-size: 0.85rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-top: 0;">Direct MTAs</h3>
+                <ul style="list-style: none; padding: 0; margin: 0; line-height: 2;">
+                    ${nestedMtasHTML || '<li style="color: #a0aec0; font-style: italic;">None</li>'}
+                </ul>
+            </div>
+        </div>
+    `;
+    (document.getElementById('sendPoolModal') as HTMLDialogElement).showModal();
+  };
+
+  (window as any).openIpPoolModal = (poolName) => {
     const poolData = enrichedData.filter(d => d.pools.includes(poolName));
     if (!poolData || poolData.length === 0) return;
-
-    document.getElementById('poolModalTitle').innerText = `Send Pool: ${poolName}`;
+    document.getElementById('ipPoolModalTitle').innerText = `IP Pool: ${poolName}`;
     poolData.sort((a, b) => ipToNumber(a.ip) - ipToNumber(b.ip));
 
     let rowsHtml = poolData.map(row => {
       const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
       return `
-        <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.1s; ${isCritical ? 'background: #fff5f5;' : ''}" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='${isCritical ? '#fff5f5' : 'transparent'}'">
-          <td style="padding: 12px; font-weight: bold; color: #2d3748;">${row.name}</td>
+        <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.1s; ${isCritical ? 'background: #fff5f5;' : ''}" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='${isCritical ? '#fff5f5' : 'transparent'}'" onclick="window.location.hash='mta=${encodeURIComponent(row.name)}'; (document.getElementById('ipPoolModal') as any).close()">
+          <td style="padding: 12px; font-weight: bold; color: #2d3748;"><a href="#mta=${encodeURIComponent(row.name)}" onclick="event.stopPropagation(); (document.getElementById('ipPoolModal') as any).close()" class="table-link">${row.name}</a></td>
           <td style="padding: 12px; font-family: monospace; font-size: 0.95rem;">${row.ip}</td>
-          <td class="center" style="padding: 12px;"><span class="badge badge-gray" style="cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" onclick="window.jumpToThrottle('${row.throttling_template}')">${row.throttling_template}</span></td>
+          <td class="center" style="padding: 12px;"><a href="#throttle=${encodeURIComponent(row.throttling_template)}" onclick="event.stopPropagation(); (document.getElementById('ipPoolModal') as any).close()" class="badge badge-gray link-badge">${row.throttling_template}</a></td>
           <td class="center" style="padding: 12px;">${formatSNDS(row.snds_filter)}</td>
           <td class="center" style="padding: 12px; ${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
           <td class="center" style="padding: 12px; ${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
@@ -646,25 +636,23 @@ import Layout from '../layouts/Layout.astro';
       `;
     }).join('');
 
-    const html = `
+    document.getElementById('ipPoolModalBodyContent').innerHTML = `
       <div style="background: #f8fafc; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0;">
           <div>
               <span style="font-size: 0.8rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Included MTAs</span>
               <div style="font-size: 1.5rem; font-weight: 800; color: #0f172a;">${poolData.length}</div>
           </div>
-          
           <div style="display: flex; gap: 10px;">
               <button class="btn-micro" style="padding: 8px 16px; font-size: 0.85rem; background: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0;" onclick="alert('Domain throttle overrides configuration coming soon!')">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   Add domain throttle override
               </button>
-              <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="document.getElementById('poolModal').close(); window.jumpToPool('${poolName}')">
+              <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="(document.getElementById('ipPoolModal') as any).close(); window.jumpToPool('${poolName}')">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                   Filter in Main View
               </button>
           </div>
       </div>
-      
       <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
         <thead>
           <tr style="background: #edf2f7; text-align: left; border-bottom: 2px solid #cbd5e0;">
@@ -677,63 +665,39 @@ import Layout from '../layouts/Layout.astro';
             <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">Google Rep</th>
           </tr>
         </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
+        <tbody>${rowsHtml}</tbody>
       </table>
     `;
-
-    document.getElementById('poolModalBodyContent').innerHTML = html;
-    (document.getElementById('poolModal') as HTMLDialogElement).showModal();
+    (document.getElementById('ipPoolModal') as HTMLDialogElement).showModal();
   };
 
   (window as any).downloadCSV = () => {
     const headers = ['IP', 'MTA Name', 'Hostname', 'Template', 'Pools', 'SNDS', 'Complaints', 'Traps', 'Google'];
-    const csv = [headers.join(','), ...currentFilteredData.map(d => [
-      d.ip, d.name, d.hostname, d.throttling_template, `"${d.pools.join(', ')}"`, d.snds_filter, d.complaints, d.traps, d.google_rep
-    ].join(','))].join('\n');
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    link.download = `inventory_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
+    const csv = [headers.join(','), ...currentFilteredData.map(d => [ d.ip, d.name, d.hostname, d.throttling_template, `"${d.pools.join(', ')}"`, d.snds_filter, d.complaints, d.traps, d.google_rep ].join(','))].join('\n');
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); link.download = `inventory_${new Date().toISOString().split('T')[0]}.csv`; link.click();
   };
 
   (window as any).sortBy = (col) => { if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; } applyFiltersAndRender(); };
   
   (window as any).setView = (v) => {
     document.getElementById('ipsView').style.display = v === 'ips' ? 'block' : 'none';
-    document.getElementById('poolsView').style.display = v === 'pools' ? 'block' : 'none';
+    document.getElementById('sendPoolsView').style.display = v === 'send-pools' ? 'block' : 'none';
+    document.getElementById('ipPoolsView').style.display = v === 'ip-pools' ? 'block' : 'none';
     document.getElementById('throttlesView').style.display = v === 'throttles' ? 'block' : 'none';
     
     document.getElementById('btnViewIps').classList.toggle('active', v === 'ips');
-    document.getElementById('btnViewPools').classList.toggle('active', v === 'pools');
+    document.getElementById('btnViewSendPools').classList.toggle('active', v === 'send-pools');
+    document.getElementById('btnViewIpPools').classList.toggle('active', v === 'ip-pools');
     document.getElementById('btnViewThrottles').classList.toggle('active', v === 'throttles');
   };
   
   (window as any).jumpToPool = (p) => { 
     activePools = [p]; 
-    document.querySelectorAll('.pool-checkbox').forEach(cb => {
-      (cb as HTMLInputElement).checked = (cb as HTMLInputElement).value === p;
-    });
-    updatePoolLabel();
-    (window as any).setView('ips'); 
-    applyFiltersAndRender(); 
+    document.querySelectorAll('.pool-checkbox').forEach(cb => { (cb as HTMLInputElement).checked = (cb as HTMLInputElement).value === p; });
+    updatePoolLabel(); (window as any).setView('ips'); applyFiltersAndRender(); 
   };
 
-  // Переход на вкладку Throttles из модалки
-  (window as any).jumpToThrottle = (templateName) => {
-    const poolModal = document.getElementById('poolModal');
-    if (poolModal) (poolModal as HTMLDialogElement).close();
-    
-    (window as any).setView('throttles');
-    
-    // В будущем здесь будет вызов API или открытие конкретной настройки темплейта
-    alert(`Configuration panel for template: "${templateName}"\n(UI Implementation pending in next update)`);
-  };
-
-  (window as any).syncData = async (btn) => {
-    alert("Syncing is now handled automatically in the background via GitHub Actions! Data refreshes every hour.");
-  };
+  (window as any).syncData = async (btn) => { alert("Syncing is now handled automatically in the background via GitHub Actions! Data refreshes every hour."); };
 
   init();
 </script>
@@ -749,19 +713,15 @@ import Layout from '../layouts/Layout.astro';
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-micro { background: #e2e8f0; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: #4a5568; cursor: pointer; transition: 0.2s; }
   .btn-micro:hover { background: #cbd5e0; color: #1a202c; }
+  .btn-micro.active { background: #3182ce; color: #fff; }
   
-  /* --- НОВАЯ СЕТКА КАРТОЧЕК --- */
   .summary-row-1 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
   .summary-row-2 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
-  
   .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; cursor: pointer; user-select: none; }
   .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
   .stat-card.active-filter { border: 2px solid #3182ce !important; background: #f0f7ff !important; transform: translateY(-2px); box-shadow: inset 0 2px 4px rgba(49, 130, 206, 0.15); }
-  
   .stat-card.info { border-left: 6px solid #3182ce !important; }
   .stat-card.warning { border-left: 6px solid #ecc94b !important; }
-  
-  /* Компактный стиль для второго ряда */
   .stat-card.small-card { padding: 1rem; display: flex; flex-direction: column; justify-content: center; }
   .stat-card.small-card .stat-label { font-size: 0.7rem; margin-bottom: 2px; }
   .stat-card.small-card .stat-value { font-size: 1.8rem; }
@@ -769,7 +729,6 @@ import Layout from '../layouts/Layout.astro';
   .stat-label { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; display: block; margin-bottom: 4px; }
   .stat-value { font-size: 2.5rem; font-weight: 900; color: #1a202c !important; line-height: 1.1; }
   
-  /* Переключатель AND / OR */
   .toggle-btn { border: none; background: transparent; padding: 4px 12px; font-size: 0.75rem; font-weight: 800; border-radius: 6px; cursor: pointer; color: #718096; transition: 0.2s; }
   .toggle-btn:hover { color: #2d3748; }
   .toggle-btn.active { background: #fff; color: #3182ce; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -790,17 +749,23 @@ import Layout from '../layouts/Layout.astro';
   
   .domain-row { transition: background 0.1s ease; cursor: pointer; }
   .domain-row:hover { background-color: #edf2f7 !important; }
-  
   .row-alert { background-color: #fff5f5 !important; }
   
-  .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 900; display: inline-block; white-space: nowrap; }
+  /* Стили для ссылок (Для работы средней кнопки мыши) */
+  .table-link { color: #3182ce; text-decoration: none; font-weight: bold; transition: color 0.1s; }
+  .table-link:hover { color: #2b6cb0; text-decoration: underline; }
+  .link-badge { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; color: #2d3748 !important; }
+  .link-badge:hover { background: #e2e8f0 !important; color: #1a202c !important; }
+
+  .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 900; display: inline-block; white-space: nowrap; text-decoration: none; }
   .badge-green { background: #c6f6d5 !important; color: #22543d !important; }
   .badge-red { background: #fed7d7 !important; color: #822727 !important; }
   .badge-yellow { background: #feebc8 !important; color: #744210 !important; }
   .badge-gray { background: #edf2f7 !important; color: #4a5568 !important; }
   
   .pools-container { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pool-tag { background: #e2e8f0; color: #2d3748; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; border: 1px solid #cbd5e0; }
+  .pool-tag { display: inline-block; background: #e2e8f0; color: #2d3748; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; border: 1px solid #cbd5e0; text-decoration: none; transition: 0.1s; }
+  .pool-tag:hover { background: #cbd5e0; }
   .pool-option-label:hover { background: #f7fafc; }
   
   .tool-nav { display: inline-flex; align-items: center; background: #0f172a; padding: 6px; border-radius: 100px; margin-bottom: 2rem; border: 1px solid #334155; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); }
@@ -820,7 +785,6 @@ import Layout from '../layouts/Layout.astro';
   .modal-header h2 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #2d3748; }
   .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #a0aec0; transition: 0.2s; }
   .close-btn:hover { color: #1a202c; }
-  .modal-body { padding: 1.5rem; }
   
   @media (max-width: 1200px) {
       .summary-row-1 { grid-template-columns: repeat(2, 1fr); }
