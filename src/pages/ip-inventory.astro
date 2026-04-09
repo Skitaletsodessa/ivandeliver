@@ -113,7 +113,7 @@ import Layout from '../layouts/Layout.astro';
       <div class="card table-outer-container" style="padding: 60px 20px; text-align: center;">
          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a0aec0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 15px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
          <h2 style="color: #2d3748; margin-bottom: 10px;">Throttles Management</h2>
-         <p style="color: #718096; max-width: 500px; margin: 0 auto;">Coming soon: Manage max_messages_per_hour, max_concurrent_connections, and Throttling Templates directly from this interface.</p>
+         <p style="color: #718096; max-width: 500px; margin: 0 auto;">Manage max_messages_per_hour, max_concurrent_connections, and Throttling Templates directly from this interface.</p>
       </div>
     </div>
 
@@ -140,7 +140,7 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </dialog>
 
-    <dialog id="poolModal" class="modal" style="max-width: 900px;">
+    <dialog id="poolModal" class="modal" style="max-width: 1000px;">
       <div class="modal-content">
         <div class="modal-header">
           <h2 id="poolModalTitle">Pool Details</h2>
@@ -172,6 +172,9 @@ import Layout from '../layouts/Layout.astro';
     gpt: new Set(),
     snds: new Set()
   };
+
+  // Переключатель логики: AND или OR
+  let filterLogicMatch = 'AND'; 
 
   async function init() {
     try {
@@ -243,7 +246,7 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  // --- ЛОГИКА ФИЛЬТРАЦИИ ПО КАРТОЧКАМ СТАТИСТИКИ ---
+  // --- ЛОГИКА ФИЛЬТРАЦИИ ПО КАРТОЧКАМ ---
   (window as any).toggleStatFilter = (category, value) => {
     if (category === 'clear') {
         activeFilters.free = false;
@@ -260,6 +263,11 @@ import Layout from '../layouts/Layout.astro';
         activeFilters.snds.has(value) ? activeFilters.snds.delete(value) : activeFilters.snds.add(value);
         (window as any).setView('ips');
     }
+    applyFiltersAndRender();
+  };
+
+  (window as any).setFilterLogic = (logic) => {
+    filterLogicMatch = logic;
     applyFiltersAndRender();
   };
 
@@ -325,7 +333,7 @@ import Layout from '../layouts/Layout.astro';
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
-    // 1. Применяем поиск и селект пулов (основная база для карточек)
+    // 1. Базовая фильтрация (Текст + Выбор пула из списка)
     let baseFiltered = enrichedData.filter(d => {
       const safeName = (d.name || '').toLowerCase();
       const safeIp = (d.ip || '').toLowerCase();
@@ -337,24 +345,28 @@ import Layout from '../layouts/Layout.astro';
       return matchSearch && matchPool;
     });
 
-    // Отрисовываем карточки на основе базового фильтра (до кликабельных карточек)
     renderSummary(baseFiltered);
 
-    // 2. Применяем кликабельные карточки (Multi-Filters)
+    // 2. Умная фильтрация по карточкам с логикой AND / OR
     let tableFiltered = baseFiltered.filter(d => {
-        let passFree = true;
-        if (activeFilters.free) passFree = d.pools.length === 0;
+        // Если ни один фильтр не активен, показываем всё
+        if (!activeFilters.free && activeFilters.gpt.size === 0 && activeFilters.snds.size === 0) return true;
 
-        let passGpt = true;
-        if (activeFilters.gpt.size > 0) passGpt = activeFilters.gpt.has(d.google_rep);
+        let matches = [];
 
-        let passSnds = true;
-        if (activeFilters.snds.size > 0) passSnds = activeFilters.snds.has(d.snds_filter);
+        if (activeFilters.free) matches.push(d.pools.length === 0);
+        if (activeFilters.gpt.size > 0) matches.push(activeFilters.gpt.has(d.google_rep));
+        if (activeFilters.snds.size > 0) matches.push(activeFilters.snds.has(d.snds_filter));
 
-        return passFree && passGpt && passSnds;
+        if (filterLogicMatch === 'AND') {
+            // При AND: IP должен пройти проверку ВСЕХ активных категорий
+            return matches.every(m => m === true);
+        } else {
+            // При OR: IP должен пройти проверку ХОТЯ БЫ ОДНОЙ активной категории
+            return matches.some(m => m === true);
+        }
     });
 
-    // Сортировка
     tableFiltered.sort((a, b) => {
       let valA = a[sortCol]; let valB = b[sortCol];
       if (sortCol === 'ip') {
@@ -368,7 +380,7 @@ import Layout from '../layouts/Layout.astro';
 
     currentFilteredData = tableFiltered;
     renderTable(tableFiltered);
-    renderPoolsView(baseFiltered); // Pools view depends only on base search
+    renderPoolsView(baseFiltered);
   }
 
   function ipToNumber(ip) {
@@ -380,7 +392,6 @@ import Layout from '../layouts/Layout.astro';
     const container = document.getElementById('inventory-summary');
     if (!container) return;
     
-    // Калькуляции для первого ряда
     const uniqueIps = new Set(data.map(d => d.ip)).size;
     const freeIpsCount = new Set(data.filter(d => d.pools.length === 0).map(d => d.ip)).size;
     
@@ -389,7 +400,6 @@ import Layout from '../layouts/Layout.astro';
     
     const uniqueThrottles = new Set(data.map(d => d.throttling_template).filter(t => t && t !== '—')).size;
 
-    // Калькуляции для второго ряда (только уникальные IP)
     const getCount = (field, val) => new Set(data.filter(d => d[field] === val).map(d => d.ip)).size;
     const gptHigh = getCount('google_rep', 'HIGH');
     const gptMed = getCount('google_rep', 'MEDIUM');
@@ -410,7 +420,7 @@ import Layout from '../layouts/Layout.astro';
 
     container.innerHTML = `
       <div class="summary-row-1">
-          <div class="stat-card info ${chk('clear')}" onclick="window.toggleStatFilter('clear')">
+          <div class="stat-card info ${chk('clear')}" onclick="window.toggleStatFilter('clear')" title="Clear all reputation filters">
               <span class="stat-label">Total Physical IPs</span>
               <span class="stat-value">${uniqueIps}</span>
           </div>
@@ -425,6 +435,15 @@ import Layout from '../layouts/Layout.astro';
           <div class="stat-card info" onclick="window.setView('throttles')" style="background: #f8fafc !important;">
               <span class="stat-label">Total Throttles</span>
               <span class="stat-value">${uniqueThrottles} <span style="font-size:1rem; color:#a0aec0;">↗</span></span>
+          </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.75rem; margin-top: 1.5rem;">
+          <span style="font-size: 0.85rem; font-weight: 800; color: #4a5568; text-transform: uppercase;">Reputation Filters</span>
+          <div style="display: flex; align-items: center; gap: 4px; background: #e2e8f0; padding: 4px; border-radius: 8px;">
+              <span style="font-size: 0.7rem; font-weight: 800; color: #718096; padding-left: 6px; text-transform: uppercase; margin-right: 4px;">Match:</span>
+              <button class="toggle-btn ${filterLogicMatch === 'AND' ? 'active' : ''}" onclick="window.setFilterLogic('AND')">AND</button>
+              <button class="toggle-btn ${filterLogicMatch === 'OR' ? 'active' : ''}" onclick="window.setFilterLogic('OR')">OR</button>
           </div>
       </div>
 
@@ -508,7 +527,7 @@ import Layout from '../layouts/Layout.astro';
     return `
       <td class="domain-text"><strong>${row.name}</strong></td>
       <td style="color: #4a5568;">${row.hostname}</td>
-      <td class="center"><span class="badge badge-gray">${row.throttling_template}</span></td>
+      <td class="center"><span class="badge badge-gray" style="cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" onclick="event.stopPropagation(); window.jumpToThrottle('${row.throttling_template}')">${row.throttling_template}</span></td>
       <td><div class="pools-container">${poolBadges}</div></td>
     `;
   }
@@ -590,7 +609,7 @@ import Layout from '../layouts/Layout.astro';
       
       <div style="margin-bottom: 20px;">
           <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px;">Throttling Template</div>
-          <div><span class="badge badge-gray" style="font-size: 0.9rem; padding: 6px 12px;">${data.throttling_template}</span></div>
+          <div><span class="badge badge-gray" style="font-size: 0.9rem; padding: 6px 12px; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" onclick="document.getElementById('detailsModal').close(); window.jumpToThrottle('${data.throttling_template}')">${data.throttling_template}</span></div>
       </div>
 
       <div style="margin-bottom: 20px;">
@@ -618,6 +637,7 @@ import Layout from '../layouts/Layout.astro';
         <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.1s; ${isCritical ? 'background: #fff5f5;' : ''}" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='${isCritical ? '#fff5f5' : 'transparent'}'">
           <td style="padding: 12px; font-weight: bold; color: #2d3748;">${row.name}</td>
           <td style="padding: 12px; font-family: monospace; font-size: 0.95rem;">${row.ip}</td>
+          <td class="center" style="padding: 12px;"><span class="badge badge-gray" style="cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" onclick="window.jumpToThrottle('${row.throttling_template}')">${row.throttling_template}</span></td>
           <td class="center" style="padding: 12px;">${formatSNDS(row.snds_filter)}</td>
           <td class="center" style="padding: 12px; ${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
           <td class="center" style="padding: 12px; ${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
@@ -632,10 +652,17 @@ import Layout from '../layouts/Layout.astro';
               <span style="font-size: 0.8rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Included MTAs</span>
               <div style="font-size: 1.5rem; font-weight: 800; color: #0f172a;">${poolData.length}</div>
           </div>
-          <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="document.getElementById('poolModal').close(); window.jumpToPool('${poolName}')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-              Filter in Main View
-          </button>
+          
+          <div style="display: flex; gap: 10px;">
+              <button class="btn-micro" style="padding: 8px 16px; font-size: 0.85rem; background: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0;" onclick="alert('Domain throttle overrides configuration coming soon!')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  Add domain throttle override
+              </button>
+              <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="document.getElementById('poolModal').close(); window.jumpToPool('${poolName}')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                  Filter in Main View
+              </button>
+          </div>
       </div>
       
       <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
@@ -643,6 +670,7 @@ import Layout from '../layouts/Layout.astro';
           <tr style="background: #edf2f7; text-align: left; border-bottom: 2px solid #cbd5e0;">
             <th style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">MTA Name</th>
             <th style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">IP Address</th>
+            <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">Template</th>
             <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">SNDS</th>
             <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">Complaints</th>
             <th class="center" style="padding: 12px; font-weight: 800; color: #4a5568; text-transform: uppercase; font-size: 0.75rem;">Traps</th>
@@ -692,7 +720,17 @@ import Layout from '../layouts/Layout.astro';
     applyFiltersAndRender(); 
   };
 
-  // SyncData оставил как заглушку, чтобы кнопка не ломалась (основная логика теперь в GitHub Actions)
+  // Переход на вкладку Throttles из модалки
+  (window as any).jumpToThrottle = (templateName) => {
+    const poolModal = document.getElementById('poolModal');
+    if (poolModal) (poolModal as HTMLDialogElement).close();
+    
+    (window as any).setView('throttles');
+    
+    // В будущем здесь будет вызов API или открытие конкретной настройки темплейта
+    alert(`Configuration panel for template: "${templateName}"\n(UI Implementation pending in next update)`);
+  };
+
   (window as any).syncData = async (btn) => {
     alert("Syncing is now handled automatically in the background via GitHub Actions! Data refreshes every hour.");
   };
@@ -714,7 +752,7 @@ import Layout from '../layouts/Layout.astro';
   
   /* --- НОВАЯ СЕТКА КАРТОЧЕК --- */
   .summary-row-1 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
-  .summary-row-2 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-bottom: 2rem; }
+  .summary-row-2 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
   
   .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; cursor: pointer; user-select: none; }
   .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
@@ -731,6 +769,11 @@ import Layout from '../layouts/Layout.astro';
   .stat-label { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; display: block; margin-bottom: 4px; }
   .stat-value { font-size: 2.5rem; font-weight: 900; color: #1a202c !important; line-height: 1.1; }
   
+  /* Переключатель AND / OR */
+  .toggle-btn { border: none; background: transparent; padding: 4px 12px; font-size: 0.75rem; font-weight: 800; border-radius: 6px; cursor: pointer; color: #718096; transition: 0.2s; }
+  .toggle-btn:hover { color: #2d3748; }
+  .toggle-btn.active { background: #fff; color: #3182ce; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
   .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
   .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; outline: none; }
   .input-field:focus { border-color: #3182ce; }
@@ -779,7 +822,6 @@ import Layout from '../layouts/Layout.astro';
   .close-btn:hover { color: #1a202c; }
   .modal-body { padding: 1.5rem; }
   
-  /* Адаптивность для мелких экранов */
   @media (max-width: 1200px) {
       .summary-row-1 { grid-template-columns: repeat(2, 1fr); }
       .summary-row-2 { grid-template-columns: repeat(4, 1fr); }
