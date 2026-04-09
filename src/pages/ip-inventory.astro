@@ -89,11 +89,17 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div id="sendPoolsView" style="display: none;">
-      <div style="display: flex; gap: 10px; margin-bottom: 1rem;">
-        <button class="btn-micro sp-filter active" id="spf-ALL" onclick="window.setSpFilter('ALL')">All Send Pools</button>
-        <button class="btn-micro sp-filter" id="spf-SHARED" onclick="window.setSpFilter('SHARED')">Shared Pools</button>
-        <button class="btn-micro sp-filter" id="spf-DEDICATED" onclick="window.setSpFilter('DEDICATED')">Dedicated Pools</button>
-        <button class="btn-micro sp-filter" id="spf-STRATEGIC" onclick="window.setSpFilter('STRATEGIC')">Strategic Pools</button>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-micro sp-filter active" id="spf-ALL" onclick="window.setSpFilter('ALL')">All Send Pools</button>
+          <button class="btn-micro sp-filter" id="spf-SHARED" onclick="window.setSpFilter('SHARED')">Shared Pools</button>
+          <button class="btn-micro sp-filter" id="spf-DEDICATED" onclick="window.setSpFilter('DEDICATED')">Dedicated Pools</button>
+          <button class="btn-micro sp-filter" id="spf-STRATEGIC" onclick="window.setSpFilter('STRATEGIC')">Strategic Pools</button>
+        </div>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 700; color: #4a5568; cursor: pointer;">
+          <input type="checkbox" id="hideIpPoolsToggle" checked onchange="window.toggleHidePureIpPools(this)" style="cursor: pointer;" />
+          Hide pure IP Pools (no nested rules)
+        </label>
       </div>
       <div class="card table-outer-container">
         <div class="table-scroll">
@@ -180,12 +186,13 @@ import Layout from '../layouts/Layout.astro';
   const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   
   let enrichedData = [];
-  let enrichedRules = []; // Хранит глубоко распарсенные Routing Rules
+  let enrichedRules = []; 
   let currentFilteredData = [];
   let sortCol = 'ip';
   let sortAsc = true;
   let activePools = [];
   let spActiveFilter = 'ALL';
+  let hidePureIpPools = true;
   
   let activeFilters = { free: false, gpt: new Set(), snds: new Set() };
   let filterLogicMatch = 'AND'; 
@@ -244,7 +251,6 @@ import Layout from '../layouts/Layout.astro';
         };
       });
 
-      // Глубокий парсинг Routing Rules
       enrichedRules = rawRules.map(r => {
           let raw = {};
           try { raw = JSON.parse(r.raw_json || '{}'); } catch(e) {}
@@ -276,7 +282,6 @@ import Layout from '../layouts/Layout.astro';
       applyFiltersAndRender();
       (window as any).renderSendPoolsView();
 
-      // Слушатель изменения Hash URL (Нативная маршрутизация)
       window.addEventListener('hashchange', (window as any).handleHashRouter);
       (window as any).handleHashRouter();
 
@@ -296,7 +301,6 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  // --- HASH ROUTER ---
   (window as any).handleHashRouter = () => {
       const hash = window.location.hash.substring(1);
       if (!hash) return;
@@ -322,7 +326,6 @@ import Layout from '../layouts/Layout.astro';
       history.replaceState(null, null, ' ');
   };
 
-  // --- ЛОГИКА ФИЛЬТРАЦИИ И РЕНДЕРИНГА ---
   (window as any).toggleStatFilter = (category, value) => {
     if (category === 'clear') {
         activeFilters.free = false; activeFilters.gpt.clear(); activeFilters.snds.clear();
@@ -488,20 +491,37 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  // --- ВКЛАДКА SEND POOLS (ТОЛЬКО Routing Rules, исключая IP пулы) ---
+  // --- ВКЛАДКА SEND POOLS ---
+  (window as any).toggleHidePureIpPools = (cb) => {
+      hidePureIpPools = cb.checked;
+      (window as any).renderSendPoolsView();
+  };
+
   (window as any).setSpFilter = (val) => { 
       spActiveFilter = val; 
       document.querySelectorAll('.sp-filter').forEach(btn => btn.classList.remove('active'));
       document.getElementById(`spf-${val}`).classList.add('active');
+      
+      // Если выбран конкретный фильтр, отключаем скрытие IP пулов, чтобы они показались
+      if (val !== 'ALL') {
+         hidePureIpPools = false;
+         (document.getElementById('hideIpPoolsToggle') as HTMLInputElement).checked = false;
+      }
+      
       (window as any).renderSendPoolsView(); 
   };
 
   (window as any).renderSendPoolsView = () => {
-    // 1. Исключаем все IP пулы (те, что содержат прямые MTAs)
-    let filtered = enrichedRules.filter(r => {
-        const hasDirectMtas = r.default_route.mtas.length > 0 || r.domain_overrides.some(o => o.route.mtas.length > 0);
-        return !hasDirectMtas;
-    });
+    let filtered = enrichedRules;
+
+    if (hidePureIpPools) {
+        // Скрываем чистые IP-пулы (где нет Domain Overrides и нет вложенных правил)
+        filtered = filtered.filter(r => {
+            const hasOverrides = r.domain_overrides.length > 0;
+            const hasNestedRules = r.default_route.rules.length > 0;
+            return hasOverrides || hasNestedRules;
+        });
+    }
 
     if (spActiveFilter === 'SHARED') {
         const shared = ['a-tec35', 'a-tec80', 'a-tec83', 'a-tec87', 'a-tec91'];
@@ -516,12 +536,11 @@ import Layout from '../layouts/Layout.astro';
     if (!tbody) return;
     
     tbody.innerHTML = filtered.map(r => {
-        // Проверяем вложенные правила: ведут ли они в IP пулы?
         const isIpPool = (name) => enrichedData.some(d => d.pools.includes(name));
         
         let nestedRulesDisplay = r.default_route.rules.map(n => {
             const hash = isIpPool(n.name) ? `#ippool=${encodeURIComponent(n.name)}` : `#sendpool=${encodeURIComponent(n.name)}`;
-            const color = isIpPool(n.name) ? '#38a169' : '#2b6cb0'; // Зеленый для IP пулов
+            const color = isIpPool(n.name) ? '#38a169' : '#2b6cb0'; 
             return `<a href="${hash}" onclick="event.stopPropagation()" class="table-link" style="color: ${color};">${n.name}</a>`;
         }).join(', ');
         
@@ -537,10 +556,10 @@ import Layout from '../layouts/Layout.astro';
             <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="event.stopPropagation(); window.location.hash='sendpool=${encodeURIComponent(r.name)}'">Manage</button></td>
           </tr>
         `;
-    }).join('') || `<tr><td colspan="4" class="center">No Send Pools found matching filters.</td></tr>`;
+    }).join('') || `<tr><td colspan="4" class="center" style="padding: 40px; color: #a0aec0;">No Send Pools found matching filters.</td></tr>`;
   };
 
-  // --- ВКЛАДКА IP POOLS (Пулы содержащие IP) ---
+  // --- ВКЛАДКА IP POOLS ---
   (window as any).renderIpPoolsView = () => {
     const term = (document.getElementById('ipPoolsSearchInput') as HTMLInputElement)?.value.toLowerCase() || '';
     
@@ -622,14 +641,13 @@ import Layout from '../layouts/Layout.astro';
     
     const isIpPool = (name) => enrichedData.some(d => d.pools.includes(name));
 
-    // Функция отрисовки узла маршрутизации
     const renderRoute = (route) => {
         let html = '';
         if (route.rules.length > 0) {
             html += route.rules.map(n => {
                 const isIp = isIpPool(n.name);
                 const hash = isIp ? `#ippool=${encodeURIComponent(n.name)}` : `#sendpool=${encodeURIComponent(n.name)}`;
-                const color = isIp ? '#38a169' : '#2b6cb0'; // Зеленый для IP Pool, Синий для Send Pool
+                const color = isIp ? '#38a169' : '#2b6cb0'; 
                 const icon = isIp ? '🟢 IP Pool:' : '🔵 Send Pool:';
                 return `<li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
                     <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">${icon}</span>
@@ -755,7 +773,104 @@ import Layout from '../layouts/Layout.astro';
     updatePoolLabel(); (window as any).setView('ips'); applyFiltersAndRender(); 
   };
 
-  (window as any).syncData = async (btn) => { alert("Syncing is now handled automatically in the background via GitHub Actions! Data refreshes every hour."); };
+  // ВОССТАНОВЛЕННАЯ ЛОГИКА РУЧНОГО ОБНОВЛЕНИЯ (Из браузера)
+  (window as any).syncData = async (btn) => {
+    const originalText = btn.innerHTML; btn.disabled = true;
+    try {
+      btn.innerHTML = '⏳ 1/3: Fetching Global Directory...';
+      const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
+      const lists = await listRes.json();
+      
+      const ipMtas = lists.mtas.filter(m => m.type === 'ip_address' || !m.type);
+      const ruleMtas = lists.rules || []; 
+      
+      const ipIds = ipMtas.map(r => r.id);
+      const ruleIds = ruleMtas.map(r => r.id);
+
+      const chunkSize = 15;
+
+      for (let i = 0; i < ipIds.length; i += chunkSize) {
+        btn.innerHTML = `⏳ 2/3: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
+        const chunk = ipIds.slice(i, i+chunkSize);
+        
+        const detailsRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk }) });
+        const detailsData = await detailsRes.json();
+
+        const usedByRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'used_by', ids: chunk }) });
+        const usedByData = await usedByRes.json();
+
+        let batchPayload = { ips: [], rules: [], relations: [], processed_mta_ids: chunk };
+
+        for (let j = 0; j < chunk.length; j++) {
+          const mtaId = chunk[j];
+          const detail = detailsData[j];
+          const usedBy = usedByData[j];
+
+          if (detail && detail.success && detail.data && detail.data.ip_address) {
+            const ipData = detail.data.ip_address;
+            batchPayload.ips.push({
+              id: ipData.id,
+              name: ipData.name,
+              ip: ipData.ip || null,
+              hostname: ipData.hostname || null,
+              delivery_paused: ipData.delivery_paused ? 1 : 0,
+              throttling_template_id: ipData.throttling_template?.id || null,
+              throttling_template_name: ipData.throttling_template?.name || null,
+              raw_json: JSON.stringify(ipData)
+            });
+          }
+
+          if (usedBy && usedBy.success && usedBy.data && Array.isArray(usedBy.data.used_by)) {
+            usedBy.data.used_by.forEach(ref => {
+              batchPayload.relations.push({
+                mta_id: mtaId,
+                used_by_id: ref.id,
+                used_by_type: ref.type,
+                used_by_name: ref.name
+              });
+            });
+          }
+        }
+
+        if (batchPayload.ips.length > 0 || batchPayload.relations.length > 0 || batchPayload.processed_mta_ids.length > 0) {
+            await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
+              method: 'POST', body: JSON.stringify(batchPayload)
+            });
+        }
+      }
+
+      for (let i = 0; i < ruleIds.length; i += chunkSize) {
+        btn.innerHTML = `⏳ 3/3: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
+        const chunk = ruleIds.slice(i, i+chunkSize);
+        const rulesRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: chunk }) });
+        const rulesData = await rulesRes.json();
+
+        let batchPayload = { ips: [], rules: [], relations: [] };
+
+        rulesData.forEach(r => {
+          if (r && r.success && r.data && r.data.routing_rule) {
+            const ruleData = r.data.routing_rule;
+            batchPayload.rules.push({
+              id: ruleData.id,
+              name: ruleData.name,
+              randomization_type: ruleData.default?.randomization_type || null,
+              raw_json: JSON.stringify(ruleData)
+            });
+          }
+        });
+
+        if (batchPayload.rules.length > 0) {
+            await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
+              method: 'POST', body: JSON.stringify(batchPayload)
+            });
+        }
+      }
+
+      btn.innerHTML = `✅ Finalizing...`;
+      await init();
+    } catch (err) { console.error(err); alert("Sync failed. Check Console for details."); }
+    finally { btn.innerHTML = originalText; btn.disabled = false; }
+  };
 
   init();
 </script>
