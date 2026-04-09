@@ -272,7 +272,7 @@ import Layout from '../layouts/Layout.astro';
               randomization_type: raw.default?.randomization_type || 'random',
               default_route: parseRoute(dt),
               domain_overrides: overrides.map(o => ({
-                  domain: o.domain,
+                  domain: (o.domains && Array.isArray(o.domains)) ? o.domains.join(', ') : 'Unknown Domain',
                   route: parseRoute(o.deliver_through)
               }))
           };
@@ -502,7 +502,6 @@ import Layout from '../layouts/Layout.astro';
       document.querySelectorAll('.sp-filter').forEach(btn => btn.classList.remove('active'));
       document.getElementById(`spf-${val}`).classList.add('active');
       
-      // Если выбран конкретный фильтр, отключаем скрытие IP пулов, чтобы они показались
       if (val !== 'ALL') {
          hidePureIpPools = false;
          (document.getElementById('hideIpPoolsToggle') as HTMLInputElement).checked = false;
@@ -515,7 +514,6 @@ import Layout from '../layouts/Layout.astro';
     let filtered = enrichedRules;
 
     if (hidePureIpPools) {
-        // Скрываем чистые IP-пулы (где нет Domain Overrides и нет вложенных правил)
         filtered = filtered.filter(r => {
             const hasOverrides = r.domain_overrides.length > 0;
             const hasNestedRules = r.default_route.rules.length > 0;
@@ -659,8 +657,8 @@ import Layout from '../layouts/Layout.astro';
         if (route.mtas.length > 0) {
             html += route.mtas.map(n => `
                 <li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
-                    <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">🔴 Direct MTA:</span>
-                    <a href="#mta=${encodeURIComponent(n.name)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: #c53030; font-size: 1.05rem;">${n.name}</a> 
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">🟣 Direct MTA:</span>
+                    <a href="#mta=${encodeURIComponent(n.name)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: #6b46c1; font-size: 1.05rem;">${n.name}</a> 
                     <span style="float: right; font-weight: bold; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">${n.portion}%</span>
                 </li>`).join('');
         }
@@ -671,7 +669,7 @@ import Layout from '../layouts/Layout.astro';
         <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #cbd5e0;">
             <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
                 <h4 style="font-size: 0.85rem; font-weight: 800; color: #4a5568; margin: 0; text-transform: uppercase;">IF Domain Matches:</h4>
-                <span class="badge badge-gray" style="font-size: 0.9rem;">${o.domain}</span>
+                <span class="badge badge-gray" style="font-size: 0.9rem; font-weight: bold; color: #2d3748 !important;">${o.domain}</span>
             </div>
             ${renderRoute(o.route)}
         </div>
@@ -773,7 +771,6 @@ import Layout from '../layouts/Layout.astro';
     updatePoolLabel(); (window as any).setView('ips'); applyFiltersAndRender(); 
   };
 
-  // ВОССТАНОВЛЕННАЯ ЛОГИКА РУЧНОГО ОБНОВЛЕНИЯ (Из браузера)
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
