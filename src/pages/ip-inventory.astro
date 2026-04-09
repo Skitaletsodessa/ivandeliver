@@ -101,9 +101,8 @@ import Layout from '../layouts/Layout.astro';
             <thead>
               <tr>
                 <th>Send Pool (Routing Rule)</th>
-                <th>Routing Logic</th>
-                <th>Nested IP Pools</th>
-                <th>Direct MTAs</th>
+                <th>Domain Overrides</th>
+                <th>Default Route (Nested Pools)</th>
                 <th class="center">Action</th>
               </tr>
             </thead>
@@ -152,13 +151,13 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </dialog>
 
-    <dialog id="sendPoolModal" class="modal" style="max-width: 700px;">
+    <dialog id="sendPoolModal" class="modal" style="max-width: 800px;">
       <div class="modal-content">
         <div class="modal-header">
           <h2 id="sendPoolModalTitle">Send Pool Details</h2>
           <button onclick="window.closeModal('sendPoolModal')" class="close-btn">&times;</button>
         </div>
-        <div class="modal-body" id="sendPoolModalBodyContent" style="padding: 1.5rem;"></div>
+        <div class="modal-body" id="sendPoolModalBodyContent" style="padding: 1.5rem; background: #edf2f7;"></div>
       </div>
     </dialog>
 
@@ -181,7 +180,7 @@ import Layout from '../layouts/Layout.astro';
   const POSTMASTER_URL = 'https://postmaster-sync.skitalets-od.workers.dev/api/domains';
   
   let enrichedData = [];
-  let enrichedRules = []; // Хранит Routing Rules
+  let enrichedRules = []; // Хранит глубоко распарсенные Routing Rules
   let currentFilteredData = [];
   let sortCol = 'ip';
   let sortAsc = true;
@@ -245,17 +244,31 @@ import Layout from '../layouts/Layout.astro';
         };
       });
 
-      // Парсинг Routing Rules
+      // Глубокий парсинг Routing Rules
       enrichedRules = rawRules.map(r => {
           let raw = {};
           try { raw = JSON.parse(r.raw_json || '{}'); } catch(e) {}
+          
+          const parseRoute = (deliverThrough) => {
+              if (!deliverThrough) return { rules: [], mtas: [] };
+              return {
+                  rules: deliverThrough.filter(x => x.routing_rule).map(x => ({name: x.routing_rule.name, portion: x.portion_of_mail})),
+                  mtas: deliverThrough.filter(x => x.virtual_mta).map(x => ({name: x.virtual_mta.name, portion: x.portion_of_mail}))
+              };
+          };
+
           let dt = raw.default?.deliver_through || [];
+          let overrides = raw.domain_overrides || [];
+
           return {
               id: r.id,
               name: r.name,
-              randomization_type: r.randomization_type || 'random',
-              nested_rules: dt.filter(x => x.routing_rule).map(x => x.routing_rule.name),
-              nested_mtas: dt.filter(x => x.virtual_mta).map(x => x.virtual_mta.name)
+              randomization_type: raw.default?.randomization_type || 'random',
+              default_route: parseRoute(dt),
+              domain_overrides: overrides.map(o => ({
+                  domain: o.domain,
+                  route: parseRoute(o.deliver_through)
+              }))
           };
       });
 
@@ -265,7 +278,7 @@ import Layout from '../layouts/Layout.astro';
 
       // Слушатель изменения Hash URL (Нативная маршрутизация)
       window.addEventListener('hashchange', (window as any).handleHashRouter);
-      (window as any).handleHashRouter(); // Проверяем хеш при загрузке
+      (window as any).handleHashRouter();
 
       document.addEventListener('click', (e) => {
         const container = document.getElementById('poolFilterContainer');
@@ -283,7 +296,7 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  // --- HASH ROUTER (Позволяет открывать ссылки в новых вкладках) ---
+  // --- HASH ROUTER ---
   (window as any).handleHashRouter = () => {
       const hash = window.location.hash.substring(1);
       if (!hash) return;
@@ -300,13 +313,13 @@ import Layout from '../layouts/Layout.astro';
           (window as any).openSendPoolModal(params.get('sendpool'));
       } else if (params.has('throttle')) {
           (window as any).setView('throttles');
-          // Тут в будущем будет открываться модалка троттла
+          alert(`Configuration panel for template: "${params.get('throttle')}"\n(UI Implementation pending in next update)`);
       }
   };
 
   (window as any).closeModal = (id) => {
       document.getElementById(id).close();
-      history.replaceState(null, null, ' '); // Очищаем URL хеш без прыжка страницы
+      history.replaceState(null, null, ' ');
   };
 
   // --- ЛОГИКА ФИЛЬТРАЦИИ И РЕНДЕРИНГА ---
@@ -475,7 +488,7 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  // --- ВКЛАДКА SEND POOLS (Routing Rules) ---
+  // --- ВКЛАДКА SEND POOLS (ТОЛЬКО Routing Rules, исключая IP пулы) ---
   (window as any).setSpFilter = (val) => { 
       spActiveFilter = val; 
       document.querySelectorAll('.sp-filter').forEach(btn => btn.classList.remove('active'));
@@ -484,36 +497,50 @@ import Layout from '../layouts/Layout.astro';
   };
 
   (window as any).renderSendPoolsView = () => {
-    let filtered = enrichedRules;
+    // 1. Исключаем все IP пулы (те, что содержат прямые MTAs)
+    let filtered = enrichedRules.filter(r => {
+        const hasDirectMtas = r.default_route.mtas.length > 0 || r.domain_overrides.some(o => o.route.mtas.length > 0);
+        return !hasDirectMtas;
+    });
+
     if (spActiveFilter === 'SHARED') {
         const shared = ['a-tec35', 'a-tec80', 'a-tec83', 'a-tec87', 'a-tec91'];
-        filtered = enrichedRules.filter(r => shared.includes(r.name));
+        filtered = filtered.filter(r => shared.includes(r.name));
     } else if (spActiveFilter === 'DEDICATED') {
-        filtered = enrichedRules.filter(r => r.name.toLowerCase().includes('dedicated'));
+        filtered = filtered.filter(r => r.name.toLowerCase().includes('dedicated'));
     } else if (spActiveFilter === 'STRATEGIC') {
-        filtered = enrichedRules.filter(r => r.name.toLowerCase().includes('strategic'));
+        filtered = filtered.filter(r => r.name.toLowerCase().includes('strategic'));
     }
 
     const tbody = document.getElementById('sendPoolsTableBody');
     if (!tbody) return;
     
     tbody.innerHTML = filtered.map(r => {
-        let nestedRulesHTML = r.nested_rules.map(n => `<a href="#ippool=${encodeURIComponent(n)}" onclick="event.stopPropagation()" class="pool-tag" style="background:#e6fffa; border-color:#38a169; color:#22543d;">${n}</a>`).join(' ');
-        let nestedMtasHTML = r.nested_mtas.map(n => `<a href="#mta=${encodeURIComponent(n)}" onclick="event.stopPropagation()" class="pool-tag">${n}</a>`).join(' ');
+        // Проверяем вложенные правила: ведут ли они в IP пулы?
+        const isIpPool = (name) => enrichedData.some(d => d.pools.includes(name));
         
+        let nestedRulesDisplay = r.default_route.rules.map(n => {
+            const hash = isIpPool(n.name) ? `#ippool=${encodeURIComponent(n.name)}` : `#sendpool=${encodeURIComponent(n.name)}`;
+            const color = isIpPool(n.name) ? '#38a169' : '#2b6cb0'; // Зеленый для IP пулов
+            return `<a href="${hash}" onclick="event.stopPropagation()" class="table-link" style="color: ${color};">${n.name}</a>`;
+        }).join(', ');
+        
+        let domainsDisplay = r.domain_overrides.length > 0 
+          ? `<span class="badge badge-gray">${r.domain_overrides.length} Overrides</span>` 
+          : `<span class="text-gray" style="font-style:italic;">No overrides</span>`;
+
         return `
           <tr class="domain-row" onclick="window.location.hash='sendpool=${encodeURIComponent(r.name)}'">
             <td><a href="#sendpool=${encodeURIComponent(r.name)}" onclick="event.stopPropagation()" class="table-link" style="font-size: 1.05rem;">${r.name}</a></td>
-            <td><span class="badge badge-gray">${r.randomization_type}</span></td>
-            <td><div class="pools-container">${nestedRulesHTML || '<span class="text-gray">—</span>'}</div></td>
-            <td><div class="pools-container">${nestedMtasHTML || '<span class="text-gray">—</span>'}</div></td>
+            <td>${domainsDisplay}</td>
+            <td>${nestedRulesDisplay || '<span class="text-gray">—</span>'}</td>
             <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="event.stopPropagation(); window.location.hash='sendpool=${encodeURIComponent(r.name)}'">Manage</button></td>
           </tr>
         `;
-    }).join('') || `<tr><td colspan="5" class="center">No Send Pools found.</td></tr>`;
+    }).join('') || `<tr><td colspan="4" class="center">No Send Pools found matching filters.</td></tr>`;
   };
 
-  // --- ВКЛАДКА IP POOLS (Old Send Pools) ---
+  // --- ВКЛАДКА IP POOLS (Пулы содержащие IP) ---
   (window as any).renderIpPoolsView = () => {
     const term = (document.getElementById('ipPoolsSearchInput') as HTMLInputElement)?.value.toLowerCase() || '';
     
@@ -540,7 +567,7 @@ import Layout from '../layouts/Layout.astro';
       let badgeCls = 'badge-gray';
       if (hasBad) badgeCls = 'badge-red'; else if (hasMedium) badgeCls = 'badge-yellow'; else if (hasHigh) badgeCls = 'badge-green';
 
-      const mtaNames = mtas.map(m => m.name);
+      const mtaNames = mtas.map(m => `<a href="#mta=${encodeURIComponent(m.name)}" onclick="event.stopPropagation()" class="table-link" style="color: #4a5568; font-weight: normal;">${m.name}</a>`);
       let mtaDisplay = mtaNames.slice(0, 5).join(', ');
       if (mtaNames.length > 5) mtaDisplay += ` <span style="color: #a0aec0; font-style: italic;">(+${mtaNames.length - 5} more)</span>`;
 
@@ -593,23 +620,54 @@ import Layout from '../layouts/Layout.astro';
     if (!rule) return;
     document.getElementById('sendPoolModalTitle').innerText = `Send Pool: ${rule.name}`;
     
-    let nestedRulesHTML = rule.nested_rules.map(n => `<li><a href="#ippool=${encodeURIComponent(n)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: #2b6cb0;">${n}</a></li>`).join('');
-    let nestedMtasHTML = rule.nested_mtas.map(n => `<li><a href="#mta=${encodeURIComponent(n)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link">${n}</a></li>`).join('');
+    const isIpPool = (name) => enrichedData.some(d => d.pools.includes(name));
+
+    // Функция отрисовки узла маршрутизации
+    const renderRoute = (route) => {
+        let html = '';
+        if (route.rules.length > 0) {
+            html += route.rules.map(n => {
+                const isIp = isIpPool(n.name);
+                const hash = isIp ? `#ippool=${encodeURIComponent(n.name)}` : `#sendpool=${encodeURIComponent(n.name)}`;
+                const color = isIp ? '#38a169' : '#2b6cb0'; // Зеленый для IP Pool, Синий для Send Pool
+                const icon = isIp ? '🟢 IP Pool:' : '🔵 Send Pool:';
+                return `<li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">${icon}</span>
+                    <a href="${hash}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: ${color}; font-size: 1.05rem;">${n.name}</a> 
+                    <span style="float: right; font-weight: bold; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">${n.portion}%</span>
+                </li>`;
+            }).join('');
+        }
+        if (route.mtas.length > 0) {
+            html += route.mtas.map(n => `
+                <li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">🔴 Direct MTA:</span>
+                    <a href="#mta=${encodeURIComponent(n.name)}" onclick="(document.getElementById('sendPoolModal') as any).close()" class="table-link" style="color: #c53030; font-size: 1.05rem;">${n.name}</a> 
+                    <span style="float: right; font-weight: bold; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">${n.portion}%</span>
+                </li>`).join('');
+        }
+        return html ? `<ul style="list-style: none; padding: 0; margin: 0;">${html}</ul>` : '<div style="padding: 10px; background: #fff; text-align: center; border-radius: 6px; border: 1px dashed #cbd5e0; color: #a0aec0; font-style: italic;">Drop / Blackhole</div>';
+    };
+
+    let overridesHtml = rule.domain_overrides.map(o => `
+        <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #cbd5e0;">
+            <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                <h4 style="font-size: 0.85rem; font-weight: 800; color: #4a5568; margin: 0; text-transform: uppercase;">IF Domain Matches:</h4>
+                <span class="badge badge-gray" style="font-size: 0.9rem;">${o.domain}</span>
+            </div>
+            ${renderRoute(o.route)}
+        </div>
+    `).join('');
 
     document.getElementById('sendPoolModalBodyContent').innerHTML = `
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 1; background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <h3 style="font-size: 0.85rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-top: 0;">Nested IP Pools</h3>
-                <ul style="list-style: none; padding: 0; margin: 0; line-height: 2;">
-                    ${nestedRulesHTML || '<li style="color: #a0aec0; font-style: italic;">None</li>'}
-                </ul>
-            </div>
-            <div style="flex: 1; background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <h3 style="font-size: 0.85rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-top: 0;">Direct MTAs</h3>
-                <ul style="list-style: none; padding: 0; margin: 0; line-height: 2;">
-                    ${nestedMtasHTML || '<li style="color: #a0aec0; font-style: italic;">None</li>'}
-                </ul>
-            </div>
+        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #cbd5e0;">
+            <h3 style="font-size: 0.95rem; font-weight: 800; color: #2d3748; text-transform: uppercase; margin: 0 0 15px 0;">Default Route Logic</h3>
+            ${renderRoute(rule.default_route)}
+            
+            ${rule.domain_overrides.length > 0 ? `
+                <h3 style="font-size: 0.95rem; font-weight: 800; color: #2d3748; text-transform: uppercase; margin: 30px 0 10px 0;">Domain Overrides</h3>
+                ${overridesHtml}
+            ` : ''}
         </div>
     `;
     (document.getElementById('sendPoolModal') as HTMLDialogElement).showModal();
@@ -624,10 +682,10 @@ import Layout from '../layouts/Layout.astro';
     let rowsHtml = poolData.map(row => {
       const isCritical = row.snds_filter === 'RED' || row.google_rep === 'BAD' || row.traps > 0;
       return `
-        <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.1s; ${isCritical ? 'background: #fff5f5;' : ''}" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='${isCritical ? '#fff5f5' : 'transparent'}'" onclick="window.location.hash='mta=${encodeURIComponent(row.name)}'; (document.getElementById('ipPoolModal') as any).close()">
-          <td style="padding: 12px; font-weight: bold; color: #2d3748;"><a href="#mta=${encodeURIComponent(row.name)}" onclick="event.stopPropagation(); (document.getElementById('ipPoolModal') as any).close()" class="table-link">${row.name}</a></td>
+        <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.1s; ${isCritical ? 'background: #fff5f5;' : ''}" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='${isCritical ? '#fff5f5' : 'transparent'}'">
+          <td style="padding: 12px; font-weight: bold; color: #2d3748;"><a href="#mta=${encodeURIComponent(row.name)}" onclick="(document.getElementById('ipPoolModal') as any).close()" class="table-link">${row.name}</a></td>
           <td style="padding: 12px; font-family: monospace; font-size: 0.95rem;">${row.ip}</td>
-          <td class="center" style="padding: 12px;"><a href="#throttle=${encodeURIComponent(row.throttling_template)}" onclick="event.stopPropagation(); (document.getElementById('ipPoolModal') as any).close()" class="badge badge-gray link-badge">${row.throttling_template}</a></td>
+          <td class="center" style="padding: 12px;"><a href="#throttle=${encodeURIComponent(row.throttling_template)}" onclick="(document.getElementById('ipPoolModal') as any).close()" class="badge badge-gray link-badge">${row.throttling_template}</a></td>
           <td class="center" style="padding: 12px;">${formatSNDS(row.snds_filter)}</td>
           <td class="center" style="padding: 12px; ${row.complaints > 0.3 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.complaints}%</td>
           <td class="center" style="padding: 12px; ${row.traps > 0 ? 'color:#e53e3e; font-weight:bold;' : ''}">${row.traps > 0 ? '🚨 ' + row.traps : '0'}</td>
@@ -751,7 +809,6 @@ import Layout from '../layouts/Layout.astro';
   .domain-row:hover { background-color: #edf2f7 !important; }
   .row-alert { background-color: #fff5f5 !important; }
   
-  /* Стили для ссылок (Для работы средней кнопки мыши) */
   .table-link { color: #3182ce; text-decoration: none; font-weight: bold; transition: color 0.1s; }
   .table-link:hover { color: #2b6cb0; text-decoration: underline; }
   .link-badge { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; color: #2d3748 !important; }
