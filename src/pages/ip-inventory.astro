@@ -28,11 +28,12 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
-    <div class="summary-grid" id="inventory-summary"></div>
+    <div id="inventory-summary"></div>
 
     <div class="view-tabs">
       <button class="tab-btn active" id="btnViewIps" onclick="window.setView('ips')">IP Addresses</button>
       <button class="tab-btn" id="btnViewPools" onclick="window.setView('pools')">Send Pools</button>
+      <button class="tab-btn" id="btnViewThrottles" onclick="window.setView('throttles')">Throttles</button>
     </div>
 
     <div id="ipsView">
@@ -108,6 +109,14 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
+    <div id="throttlesView" style="display: none;">
+      <div class="card table-outer-container" style="padding: 60px 20px; text-align: center;">
+         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a0aec0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 15px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+         <h2 style="color: #2d3748; margin-bottom: 10px;">Throttles Management</h2>
+         <p style="color: #718096; max-width: 500px; margin: 0 auto;">Coming soon: Manage max_messages_per_hour, max_concurrent_connections, and Throttling Templates directly from this interface.</p>
+      </div>
+    </div>
+
     <dialog id="detailsModal" class="modal" style="max-width: 650px;">
       <div class="modal-content">
         <div class="modal-header">
@@ -154,8 +163,15 @@ import Layout from '../layouts/Layout.astro';
   let currentFilteredData = [];
   let sortCol = 'ip';
   let sortAsc = true;
-  let activePools = []; // Теперь это массив выбранных пулов
-  let activeStatFilter = 'ALL';
+  
+  let activePools = [];
+  
+  // Умный объект для хранения активных фильтров карточек
+  let activeFilters = {
+    free: false,
+    gpt: new Set(),
+    snds: new Set()
+  };
 
   async function init() {
     try {
@@ -211,7 +227,6 @@ import Layout from '../layouts/Layout.astro';
       populatePoolDropdowns(Array.from(allPools).sort());
       applyFiltersAndRender();
 
-      // Закрытие дропдауна при клике вне его
       document.addEventListener('click', (e) => {
         const container = document.getElementById('poolFilterContainer');
         if (container && !container.contains(e.target as Node)) {
@@ -228,11 +243,30 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
+  // --- ЛОГИКА ФИЛЬТРАЦИИ ПО КАРТОЧКАМ СТАТИСТИКИ ---
+  (window as any).toggleStatFilter = (category, value) => {
+    if (category === 'clear') {
+        activeFilters.free = false;
+        activeFilters.gpt.clear();
+        activeFilters.snds.clear();
+        (window as any).setView('ips');
+    } else if (category === 'free') {
+        activeFilters.free = !activeFilters.free;
+        (window as any).setView('ips');
+    } else if (category === 'gpt') {
+        activeFilters.gpt.has(value) ? activeFilters.gpt.delete(value) : activeFilters.gpt.add(value);
+        (window as any).setView('ips');
+    } else if (category === 'snds') {
+        activeFilters.snds.has(value) ? activeFilters.snds.delete(value) : activeFilters.snds.add(value);
+        (window as any).setView('ips');
+    }
+    applyFiltersAndRender();
+  };
+
   // --- ЛОГИКА MULTI-SELECT ДРОПДАУНА ---
   function populatePoolDropdowns(pools) {
     const list = document.getElementById('poolOptionsList');
     if (!list) return;
-    
     list.innerHTML = pools.map(pool => `
         <label class="pool-option-label" style="display: flex; align-items: center; padding: 8px 15px; cursor: pointer; transition: background 0.1s;">
             <input type="checkbox" class="pool-checkbox" value="${pool}" onchange="window.togglePoolSelection(this)" style="margin-right: 12px; cursor: pointer; width: 16px; height: 16px;" ${activePools.includes(pool) ? 'checked' : ''} />
@@ -287,36 +321,40 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  // --- ЛОГИКА ФИЛЬТРАЦИИ ---
+  // --- ЛОГИКА ФИЛЬТРАЦИИ И РЕНДЕРИНГА ---
   function applyFiltersAndRender() {
     const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
-    let searchFiltered = enrichedData.filter(d => {
+    // 1. Применяем поиск и селект пулов (основная база для карточек)
+    let baseFiltered = enrichedData.filter(d => {
       const safeName = (d.name || '').toLowerCase();
       const safeIp = (d.ip || '').toLowerCase();
       const safeHost = (d.hostname || '').toLowerCase();
 
-      // Поиск по тексту
-      const matchSearch = safeName.includes(searchTerm) || 
-                          safeIp.includes(searchTerm) || 
-                          safeHost.includes(searchTerm);
-                          
-      // Логика чекбоксов пулов (если пусто = покажем все; если выбраны = покажем только те IP, что есть хотя бы в одном из выбранных пулов)
+      const matchSearch = safeName.includes(searchTerm) || safeIp.includes(searchTerm) || safeHost.includes(searchTerm);
       const matchPool = activePools.length === 0 ? true : activePools.some(selectedPool => d.pools.includes(selectedPool));
       
       return matchSearch && matchPool;
     });
 
-    renderSummary(searchFiltered);
+    // Отрисовываем карточки на основе базового фильтра (до кликабельных карточек)
+    renderSummary(baseFiltered);
 
-    let tableFiltered = searchFiltered.filter(d => {
-      if (activeStatFilter === 'ALL') return true;
-      if (activeStatFilter === 'RED') return d.snds_filter === 'RED';
-      if (activeStatFilter === 'TRAPS') return d.traps > 0;
-      if (activeStatFilter === 'GOOGLE_BAD') return d.google_rep === 'BAD' || d.google_rep === 'LOW';
-      return true;
+    // 2. Применяем кликабельные карточки (Multi-Filters)
+    let tableFiltered = baseFiltered.filter(d => {
+        let passFree = true;
+        if (activeFilters.free) passFree = d.pools.length === 0;
+
+        let passGpt = true;
+        if (activeFilters.gpt.size > 0) passGpt = activeFilters.gpt.has(d.google_rep);
+
+        let passSnds = true;
+        if (activeFilters.snds.size > 0) passSnds = activeFilters.snds.has(d.snds_filter);
+
+        return passFree && passGpt && passSnds;
     });
 
+    // Сортировка
     tableFiltered.sort((a, b) => {
       let valA = a[sortCol]; let valB = b[sortCol];
       if (sortCol === 'ip') {
@@ -330,7 +368,7 @@ import Layout from '../layouts/Layout.astro';
 
     currentFilteredData = tableFiltered;
     renderTable(tableFiltered);
-    renderPoolsView(searchFiltered);
+    renderPoolsView(baseFiltered); // Pools view depends only on base search
   }
 
   function ipToNumber(ip) {
@@ -342,29 +380,77 @@ import Layout from '../layouts/Layout.astro';
     const container = document.getElementById('inventory-summary');
     if (!container) return;
     
+    // Калькуляции для первого ряда
     const uniqueIps = new Set(data.map(d => d.ip)).size;
-    const sndsRed = new Set(data.filter(d => d.snds_filter === 'RED').map(d => d.ip)).size;
-    const trapCount = new Set(data.filter(d => d.traps > 0).map(d => d.ip)).size;
-    const googleBad = new Set(data.filter(d => d.google_rep === 'BAD' || d.google_rep === 'LOW').map(d => d.ip)).size;
+    const freeIpsCount = new Set(data.filter(d => d.pools.length === 0).map(d => d.ip)).size;
     
-    const getActiveCls = (filter) => activeStatFilter === filter ? 'active-filter' : '';
+    const uniquePools = new Set();
+    data.forEach(d => d.pools.forEach(p => uniquePools.add(p)));
+    
+    const uniqueThrottles = new Set(data.map(d => d.throttling_template).filter(t => t && t !== '—')).size;
+
+    // Калькуляции для второго ряда (только уникальные IP)
+    const getCount = (field, val) => new Set(data.filter(d => d[field] === val).map(d => d.ip)).size;
+    const gptHigh = getCount('google_rep', 'HIGH');
+    const gptMed = getCount('google_rep', 'MEDIUM');
+    const gptLow = getCount('google_rep', 'LOW');
+    const gptBad = getCount('google_rep', 'BAD');
+    
+    const sndsGreen = getCount('snds_filter', 'GREEN');
+    const sndsYellow = getCount('snds_filter', 'YELLOW');
+    const sndsRed = getCount('snds_filter', 'RED');
+
+    const chk = (cat, val) => {
+        if (cat === 'clear' && !activeFilters.free && activeFilters.gpt.size === 0 && activeFilters.snds.size === 0) return 'active-filter';
+        if (cat === 'free' && activeFilters.free) return 'active-filter';
+        if (cat === 'gpt' && activeFilters.gpt.has(val)) return 'active-filter';
+        if (cat === 'snds' && activeFilters.snds.has(val)) return 'active-filter';
+        return '';
+    };
 
     container.innerHTML = `
-      <div class="stat-card info ${getActiveCls('ALL')}" onclick="window.setStatFilter('ALL')">
-        <span class="stat-label">Total Physical IPs</span>
-        <span class="stat-value">${uniqueIps}</span>
+      <div class="summary-row-1">
+          <div class="stat-card info ${chk('clear')}" onclick="window.toggleStatFilter('clear')">
+              <span class="stat-label">Total Physical IPs</span>
+              <span class="stat-value">${uniqueIps}</span>
+          </div>
+          <div class="stat-card warning ${chk('free')}" onclick="window.toggleStatFilter('free')">
+              <span class="stat-label">Free IPs (No Pools)</span>
+              <span class="stat-value">${freeIpsCount}</span>
+          </div>
+          <div class="stat-card info" onclick="window.setView('pools')" style="background: #f8fafc !important;">
+              <span class="stat-label">Total Pools</span>
+              <span class="stat-value">${uniquePools.size} <span style="font-size:1rem; color:#a0aec0;">↗</span></span>
+          </div>
+          <div class="stat-card info" onclick="window.setView('throttles')" style="background: #f8fafc !important;">
+              <span class="stat-label">Total Throttles</span>
+              <span class="stat-value">${uniqueThrottles} <span style="font-size:1rem; color:#a0aec0;">↗</span></span>
+          </div>
       </div>
-      <div class="stat-card ${sndsRed > 0 ? 'danger' : 'success'} ${getActiveCls('RED')}" onclick="window.setStatFilter('RED')">
-        <span class="stat-label">SNDS: Red Status</span>
-        <span class="stat-value">${sndsRed}</span>
-      </div>
-      <div class="stat-card ${trapCount > 0 ? 'warning' : 'success'} ${getActiveCls('TRAPS')}" onclick="window.setStatFilter('TRAPS')">
-        <span class="stat-label">Hitting Traps</span>
-        <span class="stat-value">${trapCount}</span>
-      </div>
-      <div class="stat-card ${googleBad > 0 ? 'danger-light' : 'success'} ${getActiveCls('GOOGLE_BAD')}" onclick="window.setStatFilter('GOOGLE_BAD')">
-        <span class="stat-label">Google: Bad/Low</span>
-        <span class="stat-value">${googleBad}</span>
+
+      <div class="summary-row-2">
+          <div class="stat-card small-card ${chk('gpt', 'HIGH')}" onclick="window.toggleStatFilter('gpt', 'HIGH')" style="border-left: 4px solid #48bb78 !important;">
+              <span class="stat-label">GPT High</span><span class="stat-value">${gptHigh}</span>
+          </div>
+          <div class="stat-card small-card ${chk('gpt', 'MEDIUM')}" onclick="window.toggleStatFilter('gpt', 'MEDIUM')" style="border-left: 4px solid #ecc94b !important;">
+              <span class="stat-label">GPT Medium</span><span class="stat-value">${gptMed}</span>
+          </div>
+          <div class="stat-card small-card ${chk('gpt', 'LOW')}" onclick="window.toggleStatFilter('gpt', 'LOW')" style="border-left: 4px solid #ed8936 !important;">
+              <span class="stat-label">GPT Low</span><span class="stat-value">${gptLow}</span>
+          </div>
+          <div class="stat-card small-card ${chk('gpt', 'BAD')}" onclick="window.toggleStatFilter('gpt', 'BAD')" style="border-left: 4px solid #e53e3e !important;">
+              <span class="stat-label">GPT Bad</span><span class="stat-value">${gptBad}</span>
+          </div>
+          
+          <div class="stat-card small-card ${chk('snds', 'GREEN')}" onclick="window.toggleStatFilter('snds', 'GREEN')" style="border-left: 4px solid #48bb78 !important;">
+              <span class="stat-label">SNDS Green</span><span class="stat-value">${sndsGreen}</span>
+          </div>
+          <div class="stat-card small-card ${chk('snds', 'YELLOW')}" onclick="window.toggleStatFilter('snds', 'YELLOW')" style="border-left: 4px solid #ecc94b !important;">
+              <span class="stat-label">SNDS Yellow</span><span class="stat-value">${sndsYellow}</span>
+          </div>
+          <div class="stat-card small-card ${chk('snds', 'RED')}" onclick="window.toggleStatFilter('snds', 'RED')" style="border-left: 4px solid #e53e3e !important;">
+              <span class="stat-label">SNDS Red</span><span class="stat-value">${sndsRed}</span>
+          </div>
       </div>
     `;
   }
@@ -373,7 +459,7 @@ import Layout from '../layouts/Layout.astro';
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
     if (data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 20px;">No matching records found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="center" style="padding: 40px; font-weight: bold; color: #a0aec0;">No IPs match current filters.</td></tr>`;
       return;
     }
 
@@ -417,7 +503,7 @@ import Layout from '../layouts/Layout.astro';
   function renderMtaColumns(row) {
     const poolBadges = row.pools.length > 0 
       ? row.pools.map(p => `<span class="pool-tag">${p}</span>`).join(' ')
-      : `<span class="text-gray">—</span>`;
+      : `<span class="text-gray" style="font-style:italic;">No pools</span>`;
     
     return `
       <td class="domain-text"><strong>${row.name}</strong></td>
@@ -443,10 +529,7 @@ import Layout from '../layouts/Layout.astro';
       const mtas = poolMap[poolName];
       const ipCount = mtas.length;
 
-      let hasBad = false;
-      let hasMedium = false;
-      let hasHigh = false;
-
+      let hasBad = false, hasMedium = false, hasHigh = false;
       mtas.forEach(m => {
         if (m.google_rep === 'BAD' || m.google_rep === 'LOW') hasBad = true;
         else if (m.google_rep === 'MEDIUM') hasMedium = true;
@@ -460,9 +543,7 @@ import Layout from '../layouts/Layout.astro';
 
       const mtaNames = mtas.map(m => m.name);
       let mtaDisplay = mtaNames.slice(0, 5).join(', ');
-      if (mtaNames.length > 5) {
-        mtaDisplay += ` <span style="color: #a0aec0; font-style: italic;">(+${mtaNames.length - 5} more)</span>`;
-      }
+      if (mtaNames.length > 5) mtaDisplay += ` <span style="color: #a0aec0; font-style: italic;">(+${mtaNames.length - 5} more)</span>`;
 
       return `
         <tr class="domain-row" onclick="window.openPoolModal('${poolName}')">
@@ -529,7 +610,6 @@ import Layout from '../layouts/Layout.astro';
     if (!poolData || poolData.length === 0) return;
 
     document.getElementById('poolModalTitle').innerText = `Send Pool: ${poolName}`;
-
     poolData.sort((a, b) => ipToNumber(a.ip) - ipToNumber(b.ip));
 
     let rowsHtml = poolData.map(row => {
@@ -579,104 +659,6 @@ import Layout from '../layouts/Layout.astro';
     (document.getElementById('poolModal') as HTMLDialogElement).showModal();
   };
 
-  (window as any).syncData = async (btn) => {
-    const originalText = btn.innerHTML; btn.disabled = true;
-    try {
-      btn.innerHTML = '⏳ 1/3: Fetching Global Directory...';
-      const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
-      const lists = await listRes.json();
-      
-      const ipMtas = lists.mtas.filter(m => m.type === 'ip_address' || !m.type);
-      const ruleMtas = lists.rules || []; 
-      
-      const ipIds = ipMtas.map(r => r.id);
-      const ruleIds = ruleMtas.map(r => r.id);
-
-      const chunkSize = 15;
-
-      for (let i = 0; i < ipIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 2/3: Syncing MTAs (${Math.min(i+chunkSize, ipIds.length)}/${ipIds.length})...`;
-        const chunk = ipIds.slice(i, i+chunkSize);
-        
-        const detailsRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'ip_addresses', ids: chunk }) });
-        const detailsData = await detailsRes.json();
-
-        const usedByRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'used_by', ids: chunk }) });
-        const usedByData = await usedByRes.json();
-
-        let batchPayload = { ips: [], rules: [], relations: [], processed_mta_ids: chunk };
-
-        for (let j = 0; j < chunk.length; j++) {
-          const mtaId = chunk[j];
-          const detail = detailsData[j];
-          const usedBy = usedByData[j];
-
-          if (detail && detail.success && detail.data && detail.data.ip_address) {
-            const ipData = detail.data.ip_address;
-            batchPayload.ips.push({
-              id: ipData.id,
-              name: ipData.name,
-              ip: ipData.ip || null,
-              hostname: ipData.hostname || null,
-              delivery_paused: ipData.delivery_paused ? 1 : 0,
-              throttling_template_id: ipData.throttling_template?.id || null,
-              throttling_template_name: ipData.throttling_template?.name || null,
-              raw_json: JSON.stringify(ipData)
-            });
-          }
-
-          if (usedBy && usedBy.success && usedBy.data && Array.isArray(usedBy.data.used_by)) {
-            usedBy.data.used_by.forEach(ref => {
-              batchPayload.relations.push({
-                mta_id: mtaId,
-                used_by_id: ref.id,
-                used_by_type: ref.type,
-                used_by_name: ref.name
-              });
-            });
-          }
-        }
-
-        if (batchPayload.ips.length > 0 || batchPayload.relations.length > 0 || batchPayload.processed_mta_ids.length > 0) {
-            await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
-              method: 'POST', body: JSON.stringify(batchPayload)
-            });
-        }
-      }
-
-      for (let i = 0; i < ruleIds.length; i += chunkSize) {
-        btn.innerHTML = `⏳ 3/3: Syncing Pools (${Math.min(i+chunkSize, ruleIds.length)}/${ruleIds.length})...`;
-        const chunk = ruleIds.slice(i, i+chunkSize);
-        const rulesRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-details', { method: 'POST', body: JSON.stringify({ type: 'routing_rules', ids: chunk }) });
-        const rulesData = await rulesRes.json();
-
-        let batchPayload = { ips: [], rules: [], relations: [] };
-
-        rulesData.forEach(r => {
-          if (r && r.success && r.data && r.data.routing_rule) {
-            const ruleData = r.data.routing_rule;
-            batchPayload.rules.push({
-              id: ruleData.id,
-              name: ruleData.name,
-              randomization_type: ruleData.default?.randomization_type || null,
-              raw_json: JSON.stringify(ruleData)
-            });
-          }
-        });
-
-        if (batchPayload.rules.length > 0) {
-            await fetch('https://ga-manager.skitalets-od.workers.dev/api/update-inventory', {
-              method: 'POST', body: JSON.stringify(batchPayload)
-            });
-        }
-      }
-
-      btn.innerHTML = `✅ Finalizing...`;
-      await init();
-    } catch (err) { console.error(err); alert("Sync failed. Check Console for details."); }
-    finally { btn.innerHTML = originalText; btn.disabled = false; }
-  };
-
   (window as any).downloadCSV = () => {
     const headers = ['IP', 'MTA Name', 'Hostname', 'Template', 'Pools', 'SNDS', 'Complaints', 'Traps', 'Google'];
     const csv = [headers.join(','), ...currentFilteredData.map(d => [
@@ -689,26 +671,30 @@ import Layout from '../layouts/Layout.astro';
   };
 
   (window as any).sortBy = (col) => { if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; } applyFiltersAndRender(); };
-  (window as any).setStatFilter = (f) => { activeStatFilter = f; applyFiltersAndRender(); };
+  
   (window as any).setView = (v) => {
     document.getElementById('ipsView').style.display = v === 'ips' ? 'block' : 'none';
     document.getElementById('poolsView').style.display = v === 'pools' ? 'block' : 'none';
+    document.getElementById('throttlesView').style.display = v === 'throttles' ? 'block' : 'none';
+    
     document.getElementById('btnViewIps').classList.toggle('active', v === 'ips');
     document.getElementById('btnViewPools').classList.toggle('active', v === 'pools');
+    document.getElementById('btnViewThrottles').classList.toggle('active', v === 'throttles');
   };
   
-  // БЕСШОВНЫЙ ПЕРЕХОД: Ставит галочку в мульти-селекте и перекидывает на вкладку IP
-  (window as any).jumpToPool = (poolName) => { 
-    activePools = [poolName]; 
-    
-    // Синхронизируем UI чекбоксов
+  (window as any).jumpToPool = (p) => { 
+    activePools = [p]; 
     document.querySelectorAll('.pool-checkbox').forEach(cb => {
-      (cb as HTMLInputElement).checked = (cb as HTMLInputElement).value === poolName;
+      (cb as HTMLInputElement).checked = (cb as HTMLInputElement).value === p;
     });
-    
     updatePoolLabel();
     (window as any).setView('ips'); 
     applyFiltersAndRender(); 
+  };
+
+  // SyncData оставил как заглушку, чтобы кнопка не ломалась (основная логика теперь в GitHub Actions)
+  (window as any).syncData = async (btn) => {
+    alert("Syncing is now handled automatically in the background via GitHub Actions! Data refreshes every hour.");
   };
 
   init();
@@ -726,14 +712,22 @@ import Layout from '../layouts/Layout.astro';
   .btn-micro { background: #e2e8f0; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: #4a5568; cursor: pointer; transition: 0.2s; }
   .btn-micro:hover { background: #cbd5e0; color: #1a202c; }
   
-  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; cursor: pointer; }
-  .stat-card.active-filter { border: 2px solid #3182ce !important; background: #f0f7ff !important; }
-  .stat-card.danger { border-left: 6px solid #e53e3e !important; }
-  .stat-card.danger-light { border-left: 6px solid #ed8936 !important; } 
-  .stat-card.warning { border-left: 6px solid #ecc94b !important; } 
-  .stat-card.success { border-left: 6px solid #48bb78 !important; }
+  /* --- НОВАЯ СЕТКА КАРТОЧЕК --- */
+  .summary-row-1 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
+  .summary-row-2 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-bottom: 2rem; }
+  
+  .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; cursor: pointer; user-select: none; }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
+  .stat-card.active-filter { border: 2px solid #3182ce !important; background: #f0f7ff !important; transform: translateY(-2px); box-shadow: inset 0 2px 4px rgba(49, 130, 206, 0.15); }
+  
   .stat-card.info { border-left: 6px solid #3182ce !important; }
+  .stat-card.warning { border-left: 6px solid #ecc94b !important; }
+  
+  /* Компактный стиль для второго ряда */
+  .stat-card.small-card { padding: 1rem; display: flex; flex-direction: column; justify-content: center; }
+  .stat-card.small-card .stat-label { font-size: 0.7rem; margin-bottom: 2px; }
+  .stat-card.small-card .stat-value { font-size: 1.8rem; }
+
   .stat-label { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: #4a5568 !important; display: block; margin-bottom: 4px; }
   .stat-value { font-size: 2.5rem; font-weight: 900; color: #1a202c !important; line-height: 1.1; }
   
@@ -756,7 +750,6 @@ import Layout from '../layouts/Layout.astro';
   
   .row-alert { background-color: #fff5f5 !important; }
   
-  /* ИСПРАВЛЕННЫЙ БЕЙДЖ (не съезжает текст) */
   .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 900; display: inline-block; white-space: nowrap; }
   .badge-green { background: #c6f6d5 !important; color: #22543d !important; }
   .badge-red { background: #fed7d7 !important; color: #822727 !important; }
@@ -771,11 +764,12 @@ import Layout from '../layouts/Layout.astro';
   .nav-link { color: #94a3b8; text-decoration: none; padding: 8px 20px; border-radius: 100px; font-weight: 700; font-size: 0.95rem; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; }
   .nav-link.active { background: #3b82f6; color: #ffffff; }
   .nav-divider { width: 1px; height: 24px; background: #334155; margin: 0 8px; }
+  
   .view-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #2d3748; padding-bottom: 10px; }
   .tab-btn { background: none; border: none; color: #a0aec0; font-size: 1rem; font-weight: 700; padding: 10px 20px; cursor: pointer; border-radius: 8px; transition: 0.2s; }
-  .tab-btn.active { background: #3182ce; color: #fff; }
+  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .tab-btn.active { background: #3182ce; color: #fff; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.4); }
 
-  /* Стили для модальных окон */
   .modal { border: none; border-radius: 12px; padding: 0; width: 95%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); background: #fff; color: #1a202c; }
   .modal::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
   .modal-content { display: flex; flex-direction: column; }
@@ -784,4 +778,10 @@ import Layout from '../layouts/Layout.astro';
   .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #a0aec0; transition: 0.2s; }
   .close-btn:hover { color: #1a202c; }
   .modal-body { padding: 1.5rem; }
+  
+  /* Адаптивность для мелких экранов */
+  @media (max-width: 1200px) {
+      .summary-row-1 { grid-template-columns: repeat(2, 1fr); }
+      .summary-row-2 { grid-template-columns: repeat(4, 1fr); }
+  }
 </style>
