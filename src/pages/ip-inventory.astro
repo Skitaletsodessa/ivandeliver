@@ -193,7 +193,7 @@ import Layout from '../layouts/Layout.astro';
   let allPoolsSet = new Set();
   let activePools = [];
   let spActiveFilter = 'ALL';
-  let hidePureIpPools = false; // Set to false by default to show all routing rules
+  let hidePureIpPools = false; 
   let activeFilters = { free: false, gpt: new Set(), snds: new Set() };
   let filterLogicMatch = 'AND'; 
 
@@ -317,7 +317,6 @@ import Layout from '../layouts/Layout.astro';
               randomization_type: raw.default?.randomization_type || 'random',
               default_route: parseRoute(dt),
               domain_overrides: overrides.map(o => ({
-                  // FIX: In GA API this is a 'domains' array, not a 'domain' string
                   domain: (o.domains && Array.isArray(o.domains)) ? o.domains.join(', ') : 'Unknown Domain',
                   route: parseRoute(o.deliver_through)
               }))
@@ -855,6 +854,12 @@ import Layout from '../layouts/Layout.astro';
     
     document.getElementById('hideIpPoolsWrapper').style.display = v === 'send-pools' ? 'flex' : 'none';
   };
+  
+  (window as any).jumpToPool = (p) => { 
+    activePools = [p]; 
+    document.querySelectorAll('.pool-checkbox').forEach(cb => { (cb as HTMLInputElement).checked = (cb as HTMLInputElement).value === p; });
+    updatePoolLabel(); (window as any).setView('ips'); (window as any).applyAllFilters(); 
+  };
 
   // RESTORED MANUAL SYNC LOGIC (From browser)
   (window as any).syncData = async (btn) => {
@@ -983,9 +988,20 @@ import Layout from '../layouts/Layout.astro';
   /* --- NEW CARDS GRID --- */
   .summary-row-1 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
   .summary-row-2 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
+  
   .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; cursor: pointer; user-select: none; }
   .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
-  .stat-card.active-filter { border: 2px solid #3182ce !important; background: #f0f7ff !important; transform: translateY(-2px); box-shadow: inset 0 2px 4px rgba(49, 130, 206, 0.15); }
+  
+  /* --- ACTIVE FILTER (REVERSED COLORS) --- */
+  .stat-card.active-filter { 
+      background: #2d3748 !important; 
+      border: 1px solid #1a202c !important; 
+      transform: translateY(-3px); 
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important; 
+  }
+  .stat-card.active-filter .stat-label { color: #a0aec0 !important; }
+  .stat-card.active-filter .stat-value { color: #ffffff !important; }
+  
   .stat-card.info { border-left: 6px solid #3182ce !important; }
   .stat-card.warning { border-left: 6px solid #ecc94b !important; }
   
