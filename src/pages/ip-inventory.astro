@@ -67,7 +67,7 @@ import Layout from '../layouts/Layout.astro';
         </div>
 
         <label id="hideIpPoolsWrapper" style="display: none; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 700; color: #4a5568; cursor: pointer; margin-left: 10px;">
-          <input type="checkbox" id="hideIpPoolsToggle" checked onchange="window.toggleHidePureIpPools(this)" style="cursor: pointer;" />
+          <input type="checkbox" id="hideIpPoolsToggle" onchange="window.toggleHidePureIpPools(this)" style="cursor: pointer;" />
           Hide pure IP Pools
         </label>
       </div>
@@ -193,9 +193,12 @@ import Layout from '../layouts/Layout.astro';
   let allPoolsSet = new Set();
   let activePools = [];
   let spActiveFilter = 'ALL';
-  let hidePureIpPools = true;
+  let hidePureIpPools = false; 
   let activeFilters = { free: false, gpt: new Set(), snds: new Set() };
   let filterLogicMatch = 'AND'; 
+
+  // Утилита для конвертации IP в число (для сортировки и CIDR)
+  function ipToNumber(ip) { if (!ip) return 0; return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0; }
 
   async function init() {
     try {
@@ -212,15 +215,35 @@ import Layout from '../layouts/Layout.astro';
       const sndsData = await sndsRes.json();
       const pmData = await pmRes.json();
 
-      const googleIpMap = {};
+      // --- ИНТЕЛЛЕКТУАЛЬНЫЙ ПАРСЕР GOOGLE REPUTATION (С ПОДДЕРЖКОЙ CIDR И МАСОК) ---
+      const repRank = { 'UNKNOWN': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'BAD': 4 };
+      const getWorstRep = (r1, r2) => {
+          if (!r1) return r2;
+          if (!r2) return r1;
+          return repRank[r1] > repRank[r2] ? r1 : r2;
+      };
+
+      const exactGoogleIps = {};
+      const cidrGoogleIps = [];
+
       pmData.forEach(domainRow => {
         if(domainRow.ip_rep_detailed && domainRow.ip_rep_detailed !== '[]') {
           try {
             const reps = JSON.parse(domainRow.ip_rep_detailed);
             reps.forEach(r => {
               if(r.sampleIps) {
-                r.sampleIps.forEach(ip => {
-                  if(!googleIpMap[ip] || r.reputation === 'BAD' || r.reputation === 'LOW') googleIpMap[ip] = r.reputation;
+                r.sampleIps.forEach(ipRaw => {
+                  const ip = ipRaw.trim();
+                  if (ip.includes('/')) {
+                      // Это подсеть (CIDR)
+                      const [baseIp, prefix] = ip.split('/');
+                      const mask = ~((1 << (32 - parseInt(prefix, 10))) - 1) >>> 0;
+                      const baseNum = ipToNumber(baseIp) & mask;
+                      cidrGoogleIps.push({ baseNum, mask, rep: r.reputation });
+                  } else {
+                      // Точный IP (берем худшую репутацию если он светился на разных доменах)
+                      exactGoogleIps[ip] = getWorstRep(exactGoogleIps[ip], r.reputation);
+                  }
                 });
               }
             });
@@ -236,6 +259,17 @@ import Layout from '../layouts/Layout.astro';
 
         const sndsRecord = sndsData.find(s => s.ip === item.ip_address) || {};
 
+        // Назначаем Google Reputation с учетом CIDR-масок
+        let gRep = exactGoogleIps[item.ip_address];
+        if (!gRep) {
+            const ipNum = ipToNumber(item.ip_address);
+            const matchingCidrs = cidrGoogleIps.filter(c => (ipNum & c.mask) === c.baseNum);
+            if (matchingCidrs.length > 0) {
+                gRep = matchingCidrs.reduce((worst, c) => getWorstRep(worst, c.rep), 'UNKNOWN');
+            }
+        }
+        gRep = gRep || 'UNKNOWN';
+
         return {
           name: item.name || '',
           ip: item.ip_address || '',
@@ -246,7 +280,7 @@ import Layout from '../layouts/Layout.astro';
           complaints: sndsRecord.complaints || 0,
           traps: sndsRecord.traps || 0,
           jmr: sndsRecord.jmr_p1_sender || '',
-          google_rep: googleIpMap[item.ip_address] || 'UNKNOWN'
+          google_rep: gRep
         };
       });
 
@@ -271,6 +305,7 @@ import Layout from '../layouts/Layout.astro';
               randomization_type: raw.default?.randomization_type || 'random',
               default_route: parseRoute(dt),
               domain_overrides: overrides.map(o => ({
+                  // ИСПРАВЛЕНИЕ: В GA API это массив `domains`, а не строка `domain`
                   domain: (o.domains && Array.isArray(o.domains)) ? o.domains.join(', ') : 'Unknown Domain',
                   route: parseRoute(o.deliver_through)
               }))
@@ -308,6 +343,7 @@ import Layout from '../layouts/Layout.astro';
       const hash = window.location.hash.substring(1);
       if (!hash) return;
       
+      // Сначала закрываем все открытые окна (спасает от глюков при переходе из модалки в модалку)
       (window as any).closeAllModals();
 
       const params = new URLSearchParams(hash);
@@ -399,7 +435,6 @@ import Layout from '../layouts/Layout.astro';
   (window as any).applyAllFilters = () => {
     const searchTerm = (document.getElementById('globalSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
-    // Определяем пулы, подходящие под фильтр типов (Shared, Dedicated, Strategic)
     let validPoolTypes = [];
     const isTypeFilterActive = spActiveFilter !== 'ALL';
     if (isTypeFilterActive) {
@@ -422,9 +457,8 @@ import Layout from '../layouts/Layout.astro';
       return matchSearch && matchDropdown && matchType;
     });
 
-    renderSummary(baseFiltered); // Карточки строятся на базе глобальных фильтров
+    renderSummary(baseFiltered); 
 
-    // Применяем карточки (работают только для таблицы IP)
     let tableFiltered = baseFiltered.filter(d => {
         if (!activeFilters.free && activeFilters.gpt.size === 0 && activeFilters.snds.size === 0) return true;
         let matches = [];
@@ -480,8 +514,6 @@ import Layout from '../layouts/Layout.astro';
     renderIpPoolsTable(poolMap, filteredPoolKeys);
   };
 
-  function ipToNumber(ip) { if (!ip) return 0; return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0; }
-
   function renderSummary(data) {
     const container = document.getElementById('inventory-summary');
     if (!container) return;
@@ -496,7 +528,7 @@ import Layout from '../layouts/Layout.astro';
 
     container.innerHTML = `
       <div class="summary-row-1">
-          <div class="stat-card info ${chk('clear')}" onclick="window.toggleStatFilter('clear')">
+          <div class="stat-card info ${chk('clear')}" onclick="window.toggleStatFilter('clear')" title="Clear all reputation filters">
               <span class="stat-label">Total Physical IPs</span><span class="stat-value">${new Set(data.map(d => d.ip)).size}</span>
           </div>
           <div class="stat-card warning ${chk('free')}" onclick="window.toggleStatFilter('free')">
@@ -562,6 +594,7 @@ import Layout from '../layouts/Layout.astro';
   }
 
   function renderMtaColumns(row) {
+    // ВАЖНО: Убрано onclick=close() из ссылок, чтобы не мешать hashchange
     const poolBadges = row.pools.length > 0 ? row.pools.map(p => `<a href="#ippool=${encodeURIComponent(p)}" onclick="event.stopPropagation()" class="pool-tag">${p}</a>`).join(' ') : `<span class="text-gray" style="font-style:italic;">No pools</span>`;
     return `
       <td class="domain-text"><a href="#mta=${encodeURIComponent(row.name)}" onclick="event.stopPropagation()" class="table-link">${row.name}</a></td>
@@ -668,21 +701,22 @@ import Layout from '../layouts/Layout.astro';
     if (!rule) return;
     document.getElementById('sendPoolModalTitle').innerText = `Send Pool: ${rule.name}`;
     
+    // УМНЫЙ РЕЗОЛВЕР ССЫЛОК (Определяет IP Pool / Send Pool / MTA)
     const resolveNode = (n) => {
         const isIpPool = enrichedData.some(d => d.pools.includes(n.name));
         const isSendPool = enrichedRules.some(r => r.name === n.name);
         
         let hash = `#mta=${encodeURIComponent(n.name)}`;
-        let color = '#6b46c1';
+        let color = '#6b46c1'; // ФИОЛЕТОВЫЙ для прямых MTA
         let icon = '🟣 Direct MTA:';
         
         if (isIpPool) {
             hash = `#ippool=${encodeURIComponent(n.name)}`;
-            color = '#38a169';
+            color = '#38a169'; // Зеленый для IP Pools
             icon = '🟢 IP Pool:';
         } else if (isSendPool) {
             hash = `#sendpool=${encodeURIComponent(n.name)}`;
-            color = '#2b6cb0';
+            color = '#2b6cb0'; // Синий для Send Pools
             icon = '🔵 Send Pool:';
         }
         
@@ -702,11 +736,12 @@ import Layout from '../layouts/Layout.astro';
         return html ? `<ul style="list-style: none; padding: 0; margin: 0;">${html}</ul>` : '<div style="padding: 10px; background: #fff; text-align: center; border-radius: 6px; border: 1px dashed #cbd5e0; color: #a0aec0; font-style: italic;">Drop / Blackhole</div>';
     };
 
+    // ОГРАНИЧЕНИЕ ВЫСОТЫ ДЛЯ ДОМЕНОВ
     let overridesHtml = rule.domain_overrides.map(o => `
         <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #cbd5e0;">
             <div style="margin-bottom: 10px; display: flex; align-items: flex-start; gap: 8px; flex-direction: column;">
                 <h4 style="font-size: 0.85rem; font-weight: 800; color: #4a5568; margin: 0; text-transform: uppercase;">IF Domain Matches:</h4>
-                <div style="font-size: 0.9rem; font-weight: bold; color: #2d3748; background: #e2e8f0; padding: 6px 12px; border-radius: 6px; word-wrap: break-word; white-space: normal; max-width: 100%; border: 1px solid #cbd5e0;">${o.domain}</div>
+                <div style="font-size: 0.9rem; font-weight: bold; color: #2d3748; background: #e2e8f0; padding: 6px 12px; border-radius: 6px; word-break: break-all; white-space: normal; max-height: 80px; overflow-y: auto; border: 1px solid #cbd5e0; width: 100%; box-sizing: border-box;">${o.domain}</div>
             </div>
             ${renderRoute(o.route)}
         </div>
@@ -810,6 +845,7 @@ import Layout from '../layouts/Layout.astro';
     updatePoolLabel(); (window as any).setView('ips'); (window as any).applyAllFilters(); 
   };
 
+  // ВОССТАНОВЛЕННАЯ ЛОГИКА РУЧНОГО ОБНОВЛЕНИЯ (Из браузера)
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
