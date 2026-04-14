@@ -197,7 +197,7 @@ import Layout from '../layouts/Layout.astro';
   let activeFilters = { free: false, gpt: new Set(), snds: new Set() };
   let filterLogicMatch = 'AND'; 
 
-  // Утилита для конвертации IP в число (для сортировки и CIDR)
+  // Утилита для конвертации IP в число (для сортировки и диапазонов)
   function ipToNumber(ip) { if (!ip) return 0; return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0; }
 
   async function init() {
@@ -215,7 +215,7 @@ import Layout from '../layouts/Layout.astro';
       const sndsData = await sndsRes.json();
       const pmData = await pmRes.json();
 
-      // --- ИНТЕЛЛЕКТУАЛЬНЫЙ ПАРСЕР GOOGLE REPUTATION (С ПОДДЕРЖКОЙ CIDR И МАСОК) ---
+      // --- ИНТЕЛЛЕКТУАЛЬНЫЙ ПАРСЕР ДИАПАЗОНОВ GOOGLE REPUTATION ---
       const repRank = { 'UNKNOWN': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'BAD': 4 };
       const getWorstRep = (r1, r2) => {
           if (!r1) return r2;
@@ -224,7 +224,7 @@ import Layout from '../layouts/Layout.astro';
       };
 
       const exactGoogleIps = {};
-      const cidrGoogleIps = [];
+      const rangeGoogleIps = [];
 
       pmData.forEach(domainRow => {
         if(domainRow.ip_rep_detailed && domainRow.ip_rep_detailed !== '[]') {
@@ -233,21 +233,33 @@ import Layout from '../layouts/Layout.astro';
             reps.forEach(r => {
               if(r.sampleIps) {
                 r.sampleIps.forEach(ipRaw => {
-                  const ip = ipRaw.trim();
-                  if (ip.includes('/')) {
-                      // Это подсеть (CIDR)
-                      const [baseIp, prefix] = ip.split('/');
+                  const ipStr = ipRaw.trim();
+                  if (ipStr.includes('-')) {
+                      // Парсим точный диапазон: 163.123.186.83-163.123.186.84
+                      const [startIp, endIp] = ipStr.split('-');
+                      rangeGoogleIps.push({
+                          start: ipToNumber(startIp.trim()),
+                          end: ipToNumber(endIp.trim()),
+                          rep: r.reputation
+                      });
+                  } else if (ipStr.includes('/')) {
+                      // Фоллбэк на случай CIDR
+                      const [baseIp, prefix] = ipStr.split('/');
                       const mask = ~((1 << (32 - parseInt(prefix, 10))) - 1) >>> 0;
-                      const baseNum = ipToNumber(baseIp) & mask;
-                      cidrGoogleIps.push({ baseNum, mask, rep: r.reputation });
+                      const baseNum = ipToNumber(baseIp.trim()) & mask;
+                      rangeGoogleIps.push({
+                          start: baseNum,
+                          end: baseNum + (~mask >>> 0),
+                          rep: r.reputation
+                      });
                   } else {
-                      // Точный IP (берем худшую репутацию если он светился на разных доменах)
-                      exactGoogleIps[ip] = getWorstRep(exactGoogleIps[ip], r.reputation);
+                      // Точный IP
+                      exactGoogleIps[ipStr] = getWorstRep(exactGoogleIps[ipStr], r.reputation);
                   }
                 });
               }
             });
-          } catch(e) {}
+          } catch(e) { console.error("Error parsing Google Rep logic", e); }
         }
       });
 
@@ -259,13 +271,13 @@ import Layout from '../layouts/Layout.astro';
 
         const sndsRecord = sndsData.find(s => s.ip === item.ip_address) || {};
 
-        // Назначаем Google Reputation с учетом CIDR-масок
+        // Назначаем Google Reputation с учетом новых диапазонов
         let gRep = exactGoogleIps[item.ip_address];
         if (!gRep) {
             const ipNum = ipToNumber(item.ip_address);
-            const matchingCidrs = cidrGoogleIps.filter(c => (ipNum & c.mask) === c.baseNum);
-            if (matchingCidrs.length > 0) {
-                gRep = matchingCidrs.reduce((worst, c) => getWorstRep(worst, c.rep), 'UNKNOWN');
+            const matchingRanges = rangeGoogleIps.filter(rng => ipNum >= rng.start && ipNum <= rng.end);
+            if (matchingRanges.length > 0) {
+                gRep = matchingRanges.reduce((worst, rng) => getWorstRep(worst, rng.rep), 'UNKNOWN');
             }
         }
         gRep = gRep || 'UNKNOWN';
@@ -305,7 +317,6 @@ import Layout from '../layouts/Layout.astro';
               randomization_type: raw.default?.randomization_type || 'random',
               default_route: parseRoute(dt),
               domain_overrides: overrides.map(o => ({
-                  // ИСПРАВЛЕНИЕ: В GA API это массив `domains`, а не строка `domain`
                   domain: (o.domains && Array.isArray(o.domains)) ? o.domains.join(', ') : 'Unknown Domain',
                   route: parseRoute(o.deliver_through)
               }))
@@ -327,7 +338,7 @@ import Layout from '../layouts/Layout.astro';
 
     } catch (err) {
       console.error("Data Merge Error:", err);
-      document.getElementById('tableBody').innerHTML = `<tr><td colspan="9" class="center error-text">Error loading data. Did you update the d1-template worker?</td></tr>`;
+      document.getElementById('tableBody').innerHTML = `<tr><td colspan="9" class="center error-text">Error loading data. Check worker connectivity.</td></tr>`;
     }
   }
 
@@ -343,7 +354,6 @@ import Layout from '../layouts/Layout.astro';
       const hash = window.location.hash.substring(1);
       if (!hash) return;
       
-      // Сначала закрываем все открытые окна (спасает от глюков при переходе из модалки в модалку)
       (window as any).closeAllModals();
 
       const params = new URLSearchParams(hash);
@@ -431,7 +441,6 @@ import Layout from '../layouts/Layout.astro';
       (window as any).applyAllFilters();
   };
 
-  // ОСНОВНАЯ ФУНКЦИЯ ПРИМЕНЕНИЯ ФИЛЬТРОВ К 3 ВЛАДКАМ
   (window as any).applyAllFilters = () => {
     const searchTerm = (document.getElementById('globalSearch') as HTMLInputElement)?.value.toLowerCase() || '';
     
@@ -594,7 +603,6 @@ import Layout from '../layouts/Layout.astro';
   }
 
   function renderMtaColumns(row) {
-    // ВАЖНО: Убрано onclick=close() из ссылок, чтобы не мешать hashchange
     const poolBadges = row.pools.length > 0 ? row.pools.map(p => `<a href="#ippool=${encodeURIComponent(p)}" onclick="event.stopPropagation()" class="pool-tag">${p}</a>`).join(' ') : `<span class="text-gray" style="font-style:italic;">No pools</span>`;
     return `
       <td class="domain-text"><a href="#mta=${encodeURIComponent(row.name)}" onclick="event.stopPropagation()" class="table-link">${row.name}</a></td>
@@ -701,29 +709,28 @@ import Layout from '../layouts/Layout.astro';
     if (!rule) return;
     document.getElementById('sendPoolModalTitle').innerText = `Send Pool: ${rule.name}`;
     
-    // УМНЫЙ РЕЗОЛВЕР ССЫЛОК (Определяет IP Pool / Send Pool / MTA)
     const resolveNode = (n) => {
         const isIpPool = enrichedData.some(d => d.pools.includes(n.name));
         const isSendPool = enrichedRules.some(r => r.name === n.name);
         
         let hash = `#mta=${encodeURIComponent(n.name)}`;
-        let color = '#6b46c1'; // ФИОЛЕТОВЫЙ для прямых MTA
+        let color = '#6b46c1';
         let icon = '🟣 Direct MTA:';
         
         if (isIpPool) {
             hash = `#ippool=${encodeURIComponent(n.name)}`;
-            color = '#38a169'; // Зеленый для IP Pools
+            color = '#38a169';
             icon = '🟢 IP Pool:';
         } else if (isSendPool) {
             hash = `#sendpool=${encodeURIComponent(n.name)}`;
-            color = '#2b6cb0'; // Синий для Send Pools
+            color = '#2b6cb0';
             icon = '🔵 Send Pool:';
         }
         
         return `<li style="margin-bottom: 8px; padding: 8px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
             <div>
                 <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; margin-right: 6px;">${icon}</span>
-                <a href="${hash}" onclick="event.stopPropagation()" class="table-link" style="color: ${color}; font-size: 1.05rem;">${n.name}</a> 
+                <a href="${hash}" class="table-link" style="color: ${color}; font-size: 1.05rem;">${n.name}</a> 
             </div>
             <span style="font-weight: bold; color: #4a5568; background: #edf2f7; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">${n.portion}%</span>
         </li>`;
@@ -736,7 +743,6 @@ import Layout from '../layouts/Layout.astro';
         return html ? `<ul style="list-style: none; padding: 0; margin: 0;">${html}</ul>` : '<div style="padding: 10px; background: #fff; text-align: center; border-radius: 6px; border: 1px dashed #cbd5e0; color: #a0aec0; font-style: italic;">Drop / Blackhole</div>';
     };
 
-    // ОГРАНИЧЕНИЕ ВЫСОТЫ ДЛЯ ДОМЕНОВ
     let overridesHtml = rule.domain_overrides.map(o => `
         <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #cbd5e0;">
             <div style="margin-bottom: 10px; display: flex; align-items: flex-start; gap: 8px; flex-direction: column;">
@@ -793,10 +799,6 @@ import Layout from '../layouts/Layout.astro';
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   Add domain throttle override
               </button>
-              <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="(window as any).closeModal('ipPoolModal'); window.jumpToPool('${poolName}')">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                  Filter in Main View
-              </button>
           </div>
       </div>
       <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
@@ -838,22 +840,16 @@ import Layout from '../layouts/Layout.astro';
     
     document.getElementById('hideIpPoolsWrapper').style.display = v === 'send-pools' ? 'flex' : 'none';
   };
-  
-  (window as any).jumpToPool = (p) => { 
-    activePools = [p]; 
-    document.querySelectorAll('.pool-checkbox').forEach(cb => { (cb as HTMLInputElement).checked = (cb as HTMLInputElement).value === p; });
-    updatePoolLabel(); (window as any).setView('ips'); (window as any).applyAllFilters(); 
-  };
 
-  // ВОССТАНОВЛЕННАЯ ЛОГИКА РУЧНОГО ОБНОВЛЕНИЯ (Из браузера)
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
       btn.innerHTML = '⏳ 1/3: Fetching Global Directory...';
       const listRes = await fetch('https://ga-manager.skitalets-od.workers.dev/api/ga-list');
+      if (!listRes.ok) throw new Error(`HTTP Error: ${listRes.status}`);
       const lists = await listRes.json();
       
-      const ipMtas = lists.mtas.filter(m => m.type === 'ip_address' || !m.type);
+      const ipMtas = (lists.mtas || []).filter(m => m.type === 'ip_address' || !m.type);
       const ruleMtas = lists.rules || []; 
       
       const ipIds = ipMtas.map(r => r.id);
@@ -940,8 +936,13 @@ import Layout from '../layouts/Layout.astro';
 
       btn.innerHTML = `✅ Finalizing...`;
       await init();
-    } catch (err) { console.error(err); alert("Sync failed. Check Console for details."); }
-    finally { btn.innerHTML = originalText; btn.disabled = false; }
+    } catch (err) { 
+        console.error(err); 
+        alert(`Sync failed: ${err.message}. Check Console for details.`); 
+    } finally { 
+        btn.innerHTML = originalText; 
+        btn.disabled = false; 
+    }
   };
 
   init();
