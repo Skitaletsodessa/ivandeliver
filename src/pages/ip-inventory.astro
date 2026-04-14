@@ -37,35 +37,48 @@ import Layout from '../layouts/Layout.astro';
       <button class="tab-btn" id="btnViewThrottles" onclick="window.setView('throttles')">Throttles</button>
     </div>
 
-    <div id="ipsView">
-      <div class="table-actions-bar">
-        <div class="left-actions" style="display: flex; gap: 15px; align-items: center;">
-          <input type="text" id="ipSearch" placeholder="Search Name, IP or Hostname..." class="input-field search-input" />
-          
-          <div class="multi-select-container" id="poolFilterContainer" style="position: relative; width: 300px;">
-            <div class="input-field select-custom" onclick="window.togglePoolDropdown(event)" style="display: flex; justify-content: space-between; align-items: center; user-select: none; cursor: pointer;">
-              <span id="poolSelectLabel" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: #2d3748;">🌐 All Pools</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div id="poolDropdownBody" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; background: #fff; border: 2px solid #cbd5e0; border-radius: 8px; margin-top: 4px; z-index: 100; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15); overflow: hidden;">
-              <div style="padding: 12px; border-bottom: 1px solid #edf2f7; background: #f8fafc;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; text-transform: uppercase;">Filter by Pools</span>
-                    <button class="btn-micro" onclick="window.clearPoolSelection()">Clear All</button>
-                </div>
-                <input type="text" id="poolDropdownSearch" placeholder="Find pool..." class="input-field" style="width: 100%; padding: 8px 12px; box-sizing: border-box; font-size: 0.85rem;" oninput="window.filterPoolsList()" />
+    <div class="global-filters-bar" id="globalFiltersBar">
+      <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; flex: 1;">
+        
+        <input type="text" id="globalSearch" placeholder="Search IPs, Names, or Pools..." class="input-field search-input" oninput="window.applyAllFilters()" />
+        
+        <div class="multi-select-container" id="poolFilterContainer" style="position: relative; width: 250px;">
+          <div class="input-field select-custom" onclick="window.togglePoolDropdown(event)" style="display: flex; justify-content: space-between; align-items: center; user-select: none; cursor: pointer;">
+            <span id="poolSelectLabel" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: #2d3748;">🌐 All Pools</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div id="poolDropdownBody" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; background: #fff; border: 2px solid #cbd5e0; border-radius: 8px; margin-top: 4px; z-index: 100; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15); overflow: hidden;">
+            <div style="padding: 12px; border-bottom: 1px solid #edf2f7; background: #f8fafc;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <span style="font-size: 0.75rem; font-weight: 800; color: #a0aec0; text-transform: uppercase;">Filter by Pools</span>
+                  <button class="btn-micro" onclick="window.clearPoolSelection()">Clear All</button>
               </div>
-              <div id="poolOptionsList" style="max-height: 300px; overflow-y: auto; padding: 4px 0;"></div>
+              <input type="text" id="poolDropdownSearch" placeholder="Find pool..." class="input-field" style="width: 100%; padding: 8px 12px; box-sizing: border-box; font-size: 0.85rem;" oninput="window.filterPoolsList()" />
             </div>
+            <div id="poolOptionsList" style="max-height: 300px; overflow-y: auto; padding: 4px 0;"></div>
           </div>
         </div>
 
-        <button class="btn-export" onclick="window.downloadCSV()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          Export CSV
-        </button>
+        <div class="type-filters-group">
+          <button class="btn-micro sp-filter active" id="spf-ALL" onclick="window.setSpFilter('ALL')">All Types</button>
+          <button class="btn-micro sp-filter" id="spf-SHARED" onclick="window.setSpFilter('SHARED')">Shared</button>
+          <button class="btn-micro sp-filter" id="spf-DEDICATED" onclick="window.setSpFilter('DEDICATED')">Dedicated</button>
+          <button class="btn-micro sp-filter" id="spf-STRATEGIC" onclick="window.setSpFilter('STRATEGIC')">Strategic</button>
+        </div>
+
+        <label id="hideIpPoolsWrapper" style="display: none; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 700; color: #4a5568; cursor: pointer; margin-left: 10px;">
+          <input type="checkbox" id="hideIpPoolsToggle" checked onchange="window.toggleHidePureIpPools(this)" style="cursor: pointer;" />
+          Hide pure IP Pools
+        </label>
       </div>
 
+      <button class="btn-export" onclick="window.downloadCSV()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Export CSV
+      </button>
+    </div>
+
+    <div id="ipsView">
       <div class="card table-outer-container">
         <div class="table-scroll">
           <table>
@@ -89,18 +102,6 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div id="sendPoolsView" style="display: none;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <div style="display: flex; gap: 10px;">
-          <button class="btn-micro sp-filter active" id="spf-ALL" onclick="window.setSpFilter('ALL')">All Send Pools</button>
-          <button class="btn-micro sp-filter" id="spf-SHARED" onclick="window.setSpFilter('SHARED')">Shared Pools</button>
-          <button class="btn-micro sp-filter" id="spf-DEDICATED" onclick="window.setSpFilter('DEDICATED')">Dedicated Pools</button>
-          <button class="btn-micro sp-filter" id="spf-STRATEGIC" onclick="window.setSpFilter('STRATEGIC')">Strategic Pools</button>
-        </div>
-        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 700; color: #4a5568; cursor: pointer;">
-          <input type="checkbox" id="hideIpPoolsToggle" checked onchange="window.toggleHidePureIpPools(this)" style="cursor: pointer;" />
-          Hide pure IP Pools (no nested rules)
-        </label>
-      </div>
       <div class="card table-outer-container">
         <div class="table-scroll">
           <table>
@@ -119,9 +120,6 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div id="ipPoolsView" style="display: none;">
-      <div class="table-actions-bar">
-         <input type="text" id="ipPoolsSearchInput" placeholder="Search Pool Name or IP..." class="input-field search-input" oninput="window.renderIpPoolsView()" />
-      </div>
       <div class="card table-outer-container">
         <div class="table-scroll">
           <table>
@@ -190,10 +188,12 @@ import Layout from '../layouts/Layout.astro';
   let currentFilteredData = [];
   let sortCol = 'ip';
   let sortAsc = true;
+  
+  // Глобальные состояния фильтров
+  let allPoolsSet = new Set();
   let activePools = [];
   let spActiveFilter = 'ALL';
   let hidePureIpPools = true;
-  
   let activeFilters = { free: false, gpt: new Set(), snds: new Set() };
   let filterLogicMatch = 'AND'; 
 
@@ -228,12 +228,11 @@ import Layout from '../layouts/Layout.astro';
         }
       });
 
-      const allPools = new Set();
       enrichedData = rawIps.map(item => {
         let poolsArr = [];
         try { poolsArr = JSON.parse(item.pools || '[]'); } catch(e) {}
         poolsArr = poolsArr.filter(p => p && p !== 'null');
-        poolsArr.forEach(p => allPools.add(p));
+        poolsArr.forEach(p => allPoolsSet.add(p));
 
         const sndsRecord = sndsData.find(s => s.ip === item.ip_address) || {};
 
@@ -278,9 +277,8 @@ import Layout from '../layouts/Layout.astro';
           };
       });
 
-      populatePoolDropdowns(Array.from(allPools).sort());
-      applyFiltersAndRender();
-      (window as any).renderSendPoolsView();
+      populatePoolDropdowns(Array.from(allPoolsSet).sort());
+      (window as any).applyAllFilters();
 
       window.addEventListener('hashchange', (window as any).handleHashRouter);
       (window as any).handleHashRouter();
@@ -291,9 +289,6 @@ import Layout from '../layouts/Layout.astro';
           document.getElementById('poolDropdownBody').style.display = 'none';
         }
       });
-
-      const searchInput = document.getElementById('ipSearch');
-      if (searchInput) searchInput.addEventListener('input', applyFiltersAndRender);
 
     } catch (err) {
       console.error("Data Merge Error:", err);
@@ -313,7 +308,6 @@ import Layout from '../layouts/Layout.astro';
       const hash = window.location.hash.substring(1);
       if (!hash) return;
       
-      // Сначала жестко закрываем все окна
       (window as any).closeAllModals();
 
       const params = new URLSearchParams(hash);
@@ -329,7 +323,7 @@ import Layout from '../layouts/Layout.astro';
       } else if (params.has('throttle')) {
           (window as any).setView('throttles');
           alert(`Configuration panel for template: "${params.get('throttle')}"\n(UI Implementation pending in next update)`);
-          history.replaceState(null, null, ' '); // Очищаем хэш
+          history.replaceState(null, null, ' ');
       }
   };
 
@@ -338,6 +332,7 @@ import Layout from '../layouts/Layout.astro';
       history.replaceState(null, null, ' ');
   };
 
+  // --- КАРТОЧКИ СТАТИСТИКИ ---
   (window as any).toggleStatFilter = (category, value) => {
     if (category === 'clear') {
         activeFilters.free = false; activeFilters.gpt.clear(); activeFilters.snds.clear();
@@ -345,11 +340,12 @@ import Layout from '../layouts/Layout.astro';
     } else if (category === 'gpt') { activeFilters.gpt.has(value) ? activeFilters.gpt.delete(value) : activeFilters.gpt.add(value);
     } else if (category === 'snds') { activeFilters.snds.has(value) ? activeFilters.snds.delete(value) : activeFilters.snds.add(value); }
     (window as any).setView('ips');
-    applyFiltersAndRender();
+    (window as any).applyAllFilters();
   };
 
-  (window as any).setFilterLogic = (logic) => { filterLogicMatch = logic; applyFiltersAndRender(); };
+  (window as any).setFilterLogic = (logic) => { filterLogicMatch = logic; (window as any).applyAllFilters(); };
 
+  // --- ГЛОБАЛЬНЫЕ ФИЛЬТРЫ ---
   function populatePoolDropdowns(pools) {
     const list = document.getElementById('poolOptionsList');
     if (!list) return;
@@ -371,9 +367,9 @@ import Layout from '../layouts/Layout.astro';
   (window as any).togglePoolSelection = (cb) => {
     const val = cb.value;
     if (cb.checked) { if (!activePools.includes(val)) activePools.push(val); } else { activePools = activePools.filter(p => p !== val); }
-    updatePoolLabel(); applyFiltersAndRender();
+    updatePoolLabel(); (window as any).applyAllFilters();
   };
-  (window as any).clearPoolSelection = () => { activePools = []; document.querySelectorAll('.pool-checkbox').forEach(cb => (cb as HTMLInputElement).checked = false); updatePoolLabel(); applyFiltersAndRender(); };
+  (window as any).clearPoolSelection = () => { activePools = []; document.querySelectorAll('.pool-checkbox').forEach(cb => (cb as HTMLInputElement).checked = false); updatePoolLabel(); (window as any).applyAllFilters(); };
 
   function updatePoolLabel() {
     const label = document.getElementById('poolSelectLabel');
@@ -382,16 +378,53 @@ import Layout from '../layouts/Layout.astro';
     else { label.innerHTML = `🌐 ${activePools.length} Pools Selected`; label.style.color = '#3182ce'; }
   }
 
-  function applyFiltersAndRender() {
-    const searchTerm = (document.getElementById('ipSearch') as HTMLInputElement)?.value.toLowerCase() || '';
+  (window as any).setSpFilter = (val) => { 
+      spActiveFilter = val; 
+      document.querySelectorAll('.sp-filter').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`spf-${val}`).classList.add('active');
+      
+      if (val !== 'ALL') {
+         hidePureIpPools = false;
+         (document.getElementById('hideIpPoolsToggle') as HTMLInputElement).checked = false;
+      }
+      (window as any).applyAllFilters(); 
+  };
+
+  (window as any).toggleHidePureIpPools = (cb) => {
+      hidePureIpPools = cb.checked;
+      (window as any).applyAllFilters();
+  };
+
+  // ОСНОВНАЯ ФУНКЦИЯ ПРИМЕНЕНИЯ ФИЛЬТРОВ К 3 ВЛАДКАМ
+  (window as any).applyAllFilters = () => {
+    const searchTerm = (document.getElementById('globalSearch') as HTMLInputElement)?.value.toLowerCase() || '';
+    
+    // Определяем пулы, подходящие под фильтр типов (Shared, Dedicated, Strategic)
+    let validPoolTypes = [];
+    const isTypeFilterActive = spActiveFilter !== 'ALL';
+    if (isTypeFilterActive) {
+        const allKnown = Array.from(allPoolsSet);
+        if (spActiveFilter === 'SHARED') {
+            const shared = ['a-tec35', 'a-tec80', 'a-tec83', 'a-tec87', 'a-tec91'];
+            validPoolTypes = allKnown.filter(p => shared.includes(p));
+        } else if (spActiveFilter === 'DEDICATED') {
+            validPoolTypes = allKnown.filter(p => p.toLowerCase().includes('dedicated'));
+        } else if (spActiveFilter === 'STRATEGIC') {
+            validPoolTypes = allKnown.filter(p => p.toLowerCase().includes('strategic'));
+        }
+    }
+
+    // 1. ФИЛЬТРАЦИЯ IP ADDRESSES
     let baseFiltered = enrichedData.filter(d => {
       const matchSearch = (d.name||'').toLowerCase().includes(searchTerm) || (d.ip||'').toLowerCase().includes(searchTerm) || (d.hostname||'').toLowerCase().includes(searchTerm);
-      const matchPool = activePools.length === 0 ? true : activePools.some(selectedPool => d.pools.includes(selectedPool));
-      return matchSearch && matchPool;
+      const matchDropdown = activePools.length === 0 ? true : activePools.some(selectedPool => d.pools.includes(selectedPool));
+      const matchType = !isTypeFilterActive ? true : d.pools.some(p => validPoolTypes.includes(p));
+      return matchSearch && matchDropdown && matchType;
     });
 
-    renderSummary(baseFiltered);
+    renderSummary(baseFiltered); // Карточки строятся на базе глобальных фильтров
 
+    // Применяем карточки (работают только для таблицы IP)
     let tableFiltered = baseFiltered.filter(d => {
         if (!activeFilters.free && activeFilters.gpt.size === 0 && activeFilters.snds.size === 0) return true;
         let matches = [];
@@ -409,8 +442,43 @@ import Layout from '../layouts/Layout.astro';
 
     currentFilteredData = tableFiltered;
     renderTable(tableFiltered);
-    (window as any).renderIpPoolsView();
-  }
+
+    // 2. ФИЛЬТРАЦИЯ SEND POOLS
+    let spFiltered = enrichedRules.filter(r => {
+        const lowerName = r.name.toLowerCase();
+        const matchSearch = lowerName.includes(searchTerm);
+        const matchDropdown = activePools.length === 0 ? true : activePools.includes(r.name);
+        
+        let matchType = true;
+        if (spActiveFilter === 'SHARED') matchType = ['a-tec35', 'a-tec80', 'a-tec83', 'a-tec87', 'a-tec91'].includes(r.name);
+        else if (spActiveFilter === 'DEDICATED') matchType = lowerName.includes('dedicated');
+        else if (spActiveFilter === 'STRATEGIC') matchType = lowerName.includes('strategic');
+
+        let matchHide = true;
+        if (hidePureIpPools) matchHide = r.domain_overrides.length > 0 || r.default_route.rules.length > 0;
+
+        return matchSearch && matchDropdown && matchType && matchHide;
+    });
+    renderSendPoolsTable(spFiltered);
+
+    // 3. ФИЛЬТРАЦИЯ IP POOLS
+    const poolMap = {};
+    enrichedData.forEach(d => { d.pools.forEach(p => { if(!poolMap[p]) poolMap[p] = []; poolMap[p].push(d); }); });
+    
+    const filteredPoolKeys = Object.keys(poolMap).sort().filter(poolName => {
+        const lowerName = poolName.toLowerCase();
+        const matchSearch = lowerName.includes(searchTerm) || poolMap[poolName].some(m => m.ip.includes(searchTerm) || m.name.toLowerCase().includes(searchTerm));
+        const matchDropdown = activePools.length === 0 ? true : activePools.includes(poolName);
+        
+        let matchType = true;
+        if (spActiveFilter === 'SHARED') matchType = ['a-tec35', 'a-tec80', 'a-tec83', 'a-tec87', 'a-tec91'].includes(poolName);
+        else if (spActiveFilter === 'DEDICATED') matchType = lowerName.includes('dedicated');
+        else if (spActiveFilter === 'STRATEGIC') matchType = lowerName.includes('strategic');
+
+        return matchSearch && matchDropdown && matchType;
+    });
+    renderIpPoolsTable(poolMap, filteredPoolKeys);
+  };
 
   function ipToNumber(ip) { if (!ip) return 0; return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0; }
 
@@ -503,50 +571,11 @@ import Layout from '../layouts/Layout.astro';
     `;
   }
 
-  // --- ВКЛАДКА SEND POOLS ---
-  (window as any).toggleHidePureIpPools = (cb) => {
-      hidePureIpPools = cb.checked;
-      (window as any).renderSendPoolsView();
-  };
-
-  (window as any).setSpFilter = (val) => { 
-      spActiveFilter = val; 
-      document.querySelectorAll('.sp-filter').forEach(btn => btn.classList.remove('active'));
-      document.getElementById(`spf-${val}`).classList.add('active');
-      
-      if (val !== 'ALL') {
-         hidePureIpPools = false;
-         (document.getElementById('hideIpPoolsToggle') as HTMLInputElement).checked = false;
-      }
-      
-      (window as any).renderSendPoolsView(); 
-  };
-
-  (window as any).renderSendPoolsView = () => {
-    let filtered = enrichedRules;
-
-    if (hidePureIpPools) {
-        filtered = filtered.filter(r => {
-            const hasOverrides = r.domain_overrides.length > 0;
-            const hasNestedRules = r.default_route.rules.length > 0;
-            return hasOverrides || hasNestedRules;
-        });
-    }
-
-    if (spActiveFilter === 'SHARED') {
-        const shared = ['a-tec35', 'a-tec80', 'a-tec83', 'a-tec87', 'a-tec91'];
-        filtered = filtered.filter(r => shared.includes(r.name));
-    } else if (spActiveFilter === 'DEDICATED') {
-        filtered = filtered.filter(r => r.name.toLowerCase().includes('dedicated'));
-    } else if (spActiveFilter === 'STRATEGIC') {
-        filtered = filtered.filter(r => r.name.toLowerCase().includes('strategic'));
-    }
-
+  function renderSendPoolsTable(filteredData) {
     const tbody = document.getElementById('sendPoolsTableBody');
     if (!tbody) return;
     
-    tbody.innerHTML = filtered.map(r => {
-        // Умная функция проверки типа ноды
+    tbody.innerHTML = filteredData.map(r => {
         const isIpPool = (name) => enrichedData.some(d => d.pools.includes(name));
         
         let nestedRulesDisplay = r.default_route.rules.map(n => {
@@ -568,24 +597,13 @@ import Layout from '../layouts/Layout.astro';
           </tr>
         `;
     }).join('') || `<tr><td colspan="4" class="center" style="padding: 40px; color: #a0aec0;">No Send Pools found matching filters.</td></tr>`;
-  };
+  }
 
-  // --- ВКЛАДКА IP POOLS ---
-  (window as any).renderIpPoolsView = () => {
-    const term = (document.getElementById('ipPoolsSearchInput') as HTMLInputElement)?.value.toLowerCase() || '';
-    
-    const poolMap = {};
-    enrichedData.forEach(d => { d.pools.forEach(p => { if(!poolMap[p]) poolMap[p] = []; poolMap[p].push(d); }); });
-    
+  function renderIpPoolsTable(poolMap, poolKeys) {
     const tbody = document.getElementById('ipPoolsTableBody');
     if (!tbody) return;
 
-    const filteredPoolKeys = Object.keys(poolMap).sort().filter(poolName => {
-        if (poolName.toLowerCase().includes(term)) return true;
-        return poolMap[poolName].some(m => m.ip.includes(term) || m.name.toLowerCase().includes(term));
-    });
-
-    tbody.innerHTML = filteredPoolKeys.map(poolName => {
+    tbody.innerHTML = poolKeys.map(poolName => {
       const mtas = poolMap[poolName];
       let hasBad = false, hasMedium = false, hasHigh = false;
       mtas.forEach(m => {
@@ -609,8 +627,8 @@ import Layout from '../layouts/Layout.astro';
           <td class="center"><button class="btn-export" style="padding: 6px 12px; background: #3182ce;" onclick="event.stopPropagation(); window.location.hash='ippool=${encodeURIComponent(poolName)}'">Manage</button></td>
         </tr>
       `;
-    }).join('') || `<tr><td colspan="4" class="center">No IP pools found matching search.</td></tr>`;
-  };
+    }).join('') || `<tr><td colspan="4" class="center" style="padding: 40px; color: #a0aec0;">No IP pools found matching search.</td></tr>`;
+  }
 
   function formatSNDS(s) { let cls = 'badge-gray'; if(s === 'GREEN') cls = 'badge-green'; if(s === 'YELLOW') cls = 'badge-yellow'; if(s === 'RED') cls = 'badge-red'; return `<span class="badge ${cls}">${s}</span>`; }
   function formatGoogleRep(r) { let cls = 'badge-gray'; if(r === 'HIGH') cls = 'badge-green'; if(r === 'MEDIUM') cls = 'badge-yellow'; if(r === 'BAD' || r === 'LOW') cls = 'badge-red'; return `<span class="badge ${cls}">${r}</span>`; }
@@ -650,7 +668,6 @@ import Layout from '../layouts/Layout.astro';
     if (!rule) return;
     document.getElementById('sendPoolModalTitle').innerText = `Send Pool: ${rule.name}`;
     
-    // Универсальная функция, которая сама определяет, куда должна вести ссылка
     const resolveNode = (n) => {
         const isIpPool = enrichedData.some(d => d.pools.includes(n.name));
         const isSendPool = enrichedRules.some(r => r.name === n.name);
@@ -741,7 +758,7 @@ import Layout from '../layouts/Layout.astro';
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   Add domain throttle override
               </button>
-              <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="(document.getElementById('ipPoolModal') as any).close(); window.jumpToPool('${poolName}')">
+              <button class="btn-export" style="padding: 8px 16px; font-size: 0.85rem; background: #4a5568;" onclick="(window as any).closeModal('ipPoolModal'); window.jumpToPool('${poolName}')">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                   Filter in Main View
               </button>
@@ -771,7 +788,7 @@ import Layout from '../layouts/Layout.astro';
     const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); link.download = `inventory_${new Date().toISOString().split('T')[0]}.csv`; link.click();
   };
 
-  (window as any).sortBy = (col) => { if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; } applyFiltersAndRender(); };
+  (window as any).sortBy = (col) => { if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; } (window as any).applyAllFilters(); };
   
   (window as any).setView = (v) => {
     document.getElementById('ipsView').style.display = v === 'ips' ? 'block' : 'none';
@@ -783,15 +800,16 @@ import Layout from '../layouts/Layout.astro';
     document.getElementById('btnViewSendPools').classList.toggle('active', v === 'send-pools');
     document.getElementById('btnViewIpPools').classList.toggle('active', v === 'ip-pools');
     document.getElementById('btnViewThrottles').classList.toggle('active', v === 'throttles');
+    
+    document.getElementById('hideIpPoolsWrapper').style.display = v === 'send-pools' ? 'flex' : 'none';
   };
   
   (window as any).jumpToPool = (p) => { 
     activePools = [p]; 
     document.querySelectorAll('.pool-checkbox').forEach(cb => { (cb as HTMLInputElement).checked = (cb as HTMLInputElement).value === p; });
-    updatePoolLabel(); (window as any).setView('ips'); applyFiltersAndRender(); 
+    updatePoolLabel(); (window as any).setView('ips'); (window as any).applyAllFilters(); 
   };
 
-  // ВОССТАНОВЛЕННАЯ ЛОГИКА РУЧНОГО ОБНОВЛЕНИЯ
   (window as any).syncData = async (btn) => {
     const originalText = btn.innerHTML; btn.disabled = true;
     try {
@@ -906,6 +924,9 @@ import Layout from '../layouts/Layout.astro';
   .btn-micro:hover { background: #cbd5e0; color: #1a202c; }
   .btn-micro.active { background: #3182ce; color: #fff; }
   
+  .global-filters-bar { background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; }
+  .type-filters-group { display: flex; gap: 8px; border-left: 2px solid #cbd5e0; padding-left: 15px; height: 100%; align-items: center; }
+
   .summary-row-1 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
   .summary-row-2 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
   .stat-card { background: #fff !important; padding: 1.5rem; border-radius: 12px; border: 1px solid #cbd5e0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: all 0.2s ease; cursor: pointer; user-select: none; }
@@ -924,11 +945,10 @@ import Layout from '../layouts/Layout.astro';
   .toggle-btn:hover { color: #2d3748; }
   .toggle-btn.active { background: #fff; color: #3182ce; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
-  .table-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 15px; }
-  .input-field { padding: 12px 18px; border: 2px solid #cbd5e0; border-radius: 10px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.95rem; outline: none; }
+  .input-field { padding: 10px 15px; border: 2px solid #cbd5e0; border-radius: 8px; font-weight: 600; background: #fff !important; color: #000 !important; font-size: 0.9rem; outline: none; }
   .input-field:focus { border-color: #3182ce; }
   .search-input { width: 300px; }
-  .btn-export { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; border: none; background: #2d3748; color: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+  .btn-export { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; border: none; background: #2d3748; color: #fff; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
   
   .table-outer-container { background: #fff !important; border-radius: 12px; border: 1px solid #cbd5e0; overflow: hidden; }
   .table-scroll { max-height: 70vh; overflow-y: auto; }
@@ -975,9 +995,12 @@ import Layout from '../layouts/Layout.astro';
   .modal-header h2 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #2d3748; }
   .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #a0aec0; transition: 0.2s; }
   .close-btn:hover { color: #1a202c; }
+  .modal-body { padding: 1.5rem; }
   
   @media (max-width: 1200px) {
       .summary-row-1 { grid-template-columns: repeat(2, 1fr); }
       .summary-row-2 { grid-template-columns: repeat(4, 1fr); }
+      .global-filters-bar { flex-direction: column; align-items: flex-start; }
+      .type-filters-group { border-left: none; padding-left: 0; margin-top: 10px; }
   }
 </style>
