@@ -6,7 +6,6 @@ import ProfessionalFocus from "../components/ProfessionalFocus.astro";
 import Experience from "../components/Experience.astro";
 import Contact from "../components/Contact.astro";
 import Webring from "../components/Webring.astro";
-import BLWidget from "../components/BLWidget.tsx"; // Импортируем наш новый инструмент
 
 const variables = {
   name: "Ivan Maltsev",
@@ -24,16 +23,6 @@ const variables = {
         <Experience />
         <Contact />
       </div>
-
-      <aside class="sidebar">
-        <div class="sticky-sidebar">
-          <BLWidget client:load />
-          
-          <div class="sidebar-info">
-            <p>Quickly and easily check the health of your domain or IP address here.</p>
-          </div>
-        </div>
-      </aside>
     </div>
 
     <footer class="footer-rings">
@@ -50,10 +39,9 @@ const variables = {
   }
 
   .content-layout {
-    display: grid;
-    /* 1fr для контента, 320px для виджета */
-    grid-template-columns: 1fr 320px;
-    gap: 3rem;
+    display: block; /* Убрали grid-template-columns с сайдбаром */
+    max-width: 900px;
+    margin: 0 auto;
   }
 
   .main-content > :global(section) {
@@ -62,30 +50,11 @@ const variables = {
     padding-bottom: 2rem;
   }
 
-  .sidebar {
-    padding-top: 8rem; /* Выравниваем по высоте с началом контента */
-  }
-
-  .sticky-sidebar {
-    position: sticky;
-    top: 6rem; /* Отступ от шапки при скролле */
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  .sidebar-info {
-    padding: 1rem;
-    font-size: 0.8rem;
-    color: #94a3b8;
-    text-align: center;
-    border: 1px dashed rgba(59, 130, 246, 0.2);
-    border-radius: 12px;
-  }
-
   .footer-rings { 
-    padding: 4rem 0; 
+    padding: 4rem 0;
     display: flex; 
     justify-content: center;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    margin-top:
+    margin-top: 4rem;
+  }
+</style>
